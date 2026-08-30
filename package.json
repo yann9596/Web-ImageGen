@@ -1,14 +1,14 @@
 {
-  "name": "codex-grok-imagegen",
+  "name": "web-imagegen",
   "private": true,
   "type": "module",
   "scripts": {
-    "imagegen": "node scripts/grok-imagegen.mjs",
+    "imagegen": "node scripts/web-imagegen.mjs",
     "skill:install": "node scripts/skill-provider.mjs install",
     "provider:grok": "node scripts/skill-provider.mjs grok",
     "provider:openai": "node scripts/skill-provider.mjs openai",
     "provider:status": "node scripts/skill-provider.mjs status",
-    "test": "node --test tests/architecture.test.mjs tests/artifact.test.mjs tests/contract.test.mjs tests/jobs-select.test.mjs tests/paths.test.mjs tests/provider-switch.test.mjs tests/runtime.test.mjs"
+    "test": "node --test tests/architecture.test.mjs tests/artifact.test.mjs tests/browser-downloads.test.mjs tests/contract.test.mjs tests/jobs-select.test.mjs tests/paths.test.mjs tests/provider-switch.test.mjs tests/runtime.test.mjs"
   },
   "dependencies": {
     "sharp": "^0.35.4"

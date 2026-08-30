@@ -7,7 +7,7 @@ import { candidateIdentityKeys, gateGroupChoose, replayChoose, validatePostSelec
 import { canTransition, createBatch, lastJob, transition, writeBatch, clearJobMemory } from "../src/jobs.mjs"
 
 test("state transitions and disk recovery remain deterministic", () => {
-  const workspace = mkdtempSync(join(tmpdir(), "grok-jobs-"))
+  const workspace = mkdtempSync(join(tmpdir(), "web-imagegen-jobs-"))
   const sessionDir = join(workspace, "imagine", "session")
   const jobDir = join(sessionDir, "job")
   mkdirSync(jobDir, { recursive: true })

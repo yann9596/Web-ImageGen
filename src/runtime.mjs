@@ -134,8 +134,8 @@ export async function initFromRequest(requestPath) {
   const checked = validateInit(input)
   if (!checked.ok) fail(checked.error)
   const value = checked.value
-  const requestRoot = join(resolve(value.workspace), ".grok-imagegen")
-  if (!isWithin(requestPath, requestRoot)) fail("invalid-request", "request JSON must be under <workspace>/.grok-imagegen")
+  const requestRoot = join(resolve(value.workspace), ".web-imagegen")
+  if (!isWithin(requestPath, requestRoot)) fail("invalid-request", "request JSON must be under <workspace>/.web-imagegen")
   const referenceIds = await validateReferences(value.refFiles)
 
   const sessionID = String(input.sessionID || `codex-${randomBytes(6).toString("hex")}`)

@@ -1,11 +1,11 @@
 ---
-name: grok-imagegen
-description: Generate and select project raster images through the user's explicitly supplied, signed-in Grok Chrome tab when Grok is the active global image provider. Use for ordinary image creation, reference-image generation, variants, and AI-led or user-led selection. Do not use for vector/code-native assets or while OpenAI ImageGen is the active provider.
+name: web-imagegen
+description: Generate and select project raster images through the active Web ImageGen provider. The current Grok provider uses the user's explicitly supplied, signed-in Chrome tab. Use for ordinary image creation, reference-image generation, variants, and AI-led or user-led selection. Do not use for vector/code-native assets or while another global image skill is active.
 ---
 
-# Grok ImageGen
+# Web ImageGen
 
-Use Codex's existing Chrome capability as the only image-generation tool. Never call built-in `image_gen`, an API, MCP, Playwright, CDP, or another browser, and never fall back after failure.
+Web ImageGen is provider-neutral at the project boundary. This release implements only the `grok` provider. For that provider, use Codex's existing Chrome capability as the only image-generation tool. Never call built-in `image_gen`, a direct provider API or MCP, standalone Playwright, CDP, or another browser, and never fall back after failure.
 
 ## Preconditions
 
@@ -16,7 +16,7 @@ Use Codex's existing Chrome capability as the only image-generation tool. Never 
 
 ## Route the workflow
 
-The active Grok workflow is a user-controlled task setting, not something inferred from prompt wording.
+The active workflow is a user-controlled task setting, not something inferred from prompt wording.
 
 1. Reuse the current task's `workflow=ai|user` value when present.
 2. If it is unset, ask once whether Codex or the user will choose the result, then keep that choice for the task.
@@ -32,7 +32,8 @@ Do not classify requests into generic generate/edit modes. Treat supplied local 
 - In user-led work, submit the user's prompt unchanged unless the user explicitly requests rewriting.
 - Use the local runtime for state transitions, image-byte validation, idempotency, recovery, and final file conversion. Browser page state is not persistent state.
 - Accept a candidate only when it belongs to the current batch and the runtime verifies real, complete, decodable JPEG, PNG, or WebP bytes.
-- A preview, thumbnail, data URI, element screenshot, or renamed file is not a successful original.
+- A preview, thumbnail, browser-only media reference, element screenshot, or renamed file is not a successful original. Browser media becomes eligible only after Chrome materializes it to a local file and the runtime validates it.
+- Materialize the verified current Post image through the Chrome media surface described in [references/runtime.md](references/runtime.md); never replay a provider HTTP request or expose its bytes in diagnostics.
 - Preserve unchosen candidates and existing project assets. Do not overwrite without explicit user intent.
 - Keep diagnostics free of cookies, storage, account details, full HTML, and full-page screenshots. Ask before capturing an extra page screenshot.
 - Report the final saved path, the submitted prompt, the workflow, and that Grok Chrome was used.

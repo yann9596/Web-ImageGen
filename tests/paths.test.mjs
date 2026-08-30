@@ -8,7 +8,7 @@ import { jobDirName, pickSessionLabel, slug } from "../src/paths.mjs"
 test("workspace names preserve CJK and redraw versions", () => {
   assert.equal(slug("一束送给老婆的花"), "一束送给老婆的花")
   assert.equal(pickSessionLabel({ sessionTitle: "New session", prompt: "a red panda" }), "a-red-panda")
-  const dir = mkdtempSync(join(tmpdir(), "grok-paths-"))
+  const dir = mkdtempSync(join(tmpdir(), "web-imagegen-paths-"))
   mkdirSync(join(dir, "花束"))
   assert.equal(jobDirName("花束", "更写实", true, dir), "花束-V2_更写实")
 })

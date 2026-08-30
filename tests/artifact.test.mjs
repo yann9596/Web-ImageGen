@@ -8,7 +8,7 @@ import { transcodeBuffer, writeChosenFile } from "../src/artifact.mjs"
 import { imageFile } from "./helpers.mjs"
 
 test("sharp performs a real PNG to JPEG conversion", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "grok-artifact-"))
+  const dir = mkdtempSync(join(tmpdir(), "web-imagegen-artifact-"))
   const source = await imageFile(dir, "source.png", { color: "#ff2200", width: 23, height: 17 })
   const destination = join(dir, "chosen.jpg")
   const result = await writeChosenFile(source, destination)
@@ -20,7 +20,7 @@ test("sharp performs a real PNG to JPEG conversion", async () => {
 })
 
 test("transcode rejects unsupported output formats", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "grok-artifact-"))
+  const dir = mkdtempSync(join(tmpdir(), "web-imagegen-artifact-"))
   const source = await imageFile(dir, "source.png")
   await assert.rejects(() => transcodeBuffer(readFileSync(source), ".gif"), /invalid-out-format/)
 })

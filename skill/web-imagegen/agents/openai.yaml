@@ -1,0 +1,6 @@
+interface:
+  display_name: "Web ImageGen"
+  short_description: "Generate project images through the active web provider"
+  default_prompt: "Use $web-imagegen to create and save an image for this project."
+policy:
+  allow_implicit_invocation: true

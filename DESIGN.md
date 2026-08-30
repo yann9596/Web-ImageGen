@@ -1,8 +1,8 @@
-# Codex Grok ImageGen 设计
+# Web ImageGen for Codex 设计
 
 ## 1. 目标
 
-本项目为 Codex 提供一个可全局启用的 Grok ImageGen Skill。它在 Grok 被选为全局 Generation Provider 时，使用 Codex 自带的 Chrome 能力接管用户明确指定、已登录的 Grok 标签页，并复用项目现有状态机、候选校验和文件落盘语义。
+Web ImageGen 是供应商中立的 Codex 生图项目，统一提供全局安装、供应商切换、状态机、候选校验和文件落盘能力。当前版本只实现 `grok` Provider Integration：当 Grok 被选为全局 Generation Provider 时，Web ImageGen Skill 使用 Codex 自带的 Chrome 能力接管用户明确指定、已登录的 Grok 标签页。
 
 系统必须保持轻量和单路径：无 MCP、无 Playwright/CDP、无自管浏览器/profile、无 HTTP daemon、无第二浏览器后端、失败不降级。
 
@@ -12,7 +12,7 @@
 - 不兼容 OpenCode，不保留 OpenCode 工具协议。
 - 不实现 ChatGPT 网页生图 provider。
 - 不搜索或自动创建 Grok 标签页。
-- 不从用户提示词推断全局提供方或 Grok 工作流模式。
+- 不从用户提示词推断全局提供方或 Workflow Mode。
 - 不移植官方 ImageGen Skill 的 `generate/edit` 分类、通用提示词优化器或逐项语义校验门。
 - 不把截图、缩略图、模糊预览或合成占位图当作最终原图。
 
@@ -24,21 +24,22 @@
 
 | 值 | 启用 | 禁用 | 唯一底层能力 |
 |---|---|---|---|
-| `openai` | 官方 ImageGen Skill | Grok ImageGen Skill | 内置 `image_gen` |
-| `grok` | Grok ImageGen Skill | 官方 ImageGen Skill | Codex Chrome |
+| `openai` | 官方 ImageGen Skill | Web ImageGen Skill | 内置 `image_gen` |
+| `grok` | Web ImageGen Skill（Grok Integration） | 官方 ImageGen Skill | Codex Chrome |
 
-切换由用户显式运行命令完成。命令更新 Codex 的 Skill 启用配置后要求重启 Codex。任何时刻只能有一个 ImageGen Skill 生效；不在单个 Skill 内实现 provider 路由或 fallback。
+切换由用户显式运行命令完成。命令更新 Codex 的 Skill 启用配置后要求重启 Codex。任何时刻只能有一个 ImageGen Skill 生效；不在请求过程中按提示词路由或 fallback。后续供应商通过新的显式 Provider Integration 和 provider 值加入，不改变 `Web ImageGen` 的项目名称。
 
-### 3.2 Grok Workflow Mode
+### 3.2 Workflow Mode
 
-Grok Skill 内部另有 `workflow=ai|user`。首次未设置时询问一次，并在当前 Codex 任务内保持，直到用户切换。它只决定提示词归属、页面控制和选图责任，不改变全局 Generation Provider。
+Web ImageGen Skill 内部另有 `workflow=ai|user`。首次未设置时询问一次，并在当前 Codex 任务内保持，直到用户切换。它只决定提示词归属、供应商界面控制和选图责任，不改变全局 Generation Provider。
 
 ## 4. 组件与依赖方向
 
 ```text
 Codex task
-  └─ Grok ImageGen Skill
-       ├─ Codex Chrome skill/runtime     浏览器读取与动作
+  └─ Web ImageGen Skill
+       ├─ Grok Provider Integration       当前供应商编排
+       │    └─ Codex Chrome skill/runtime 浏览器读取与动作
        └─ one-shot local CLI             确定性状态与文件操作
             ├─ contract                  输入、状态、错误
             ├─ jobs                      状态转移、幂等、恢复
@@ -50,9 +51,9 @@ Codex task
 
 浏览器对象不得进入本地状态模块。本地 CLI 只接收普通 JSON、明确的本地文件路径和页面观察结果，因此测试无需浏览器。
 
-## 5. Skill 职责
+## 5. Web ImageGen Skill 职责
 
-Grok Skill 负责：
+当前 Grok Provider Integration 负责：
 
 1. 确认当前全局提供方确实为 Grok。
 2. 读取或询问当前任务的 Workflow Mode。
@@ -60,11 +61,11 @@ Grok Skill 负责：
 4. 检查页面属于 Grok Imagine 且当前会话已登录。
 5. 根据 Workflow Mode 输入提示词、参考图以及允许的页面选项。
 6. 观察当前批次身份和生成完成信号。
-7. 通过 Grok 页面触发原图下载。
+7. 从已验证的当前 Post 通过 Chrome 媒体表面物化原图；禁止重放 Grok HTTP 请求。
 8. 调用本地 CLI 校验候选、推进状态、执行选择和落盘。
 9. 向用户展示需要决定的候选、状态和最终项目路径。
 
-Skill 不负责：
+Web ImageGen Skill 不负责：
 
 - 浏览器连接实现、扩展安装或登录凭据。
 - 自己启动浏览器或保存浏览器 profile。
@@ -78,6 +79,7 @@ Skill 不负责：
 
 - 仅允许在该标签页及其由用户动作产生的 Grok 页面状态中工作。
 - 不枚举历史记录、Cookie、localStorage、密码或 profile。
+- 允许读取当前 Post 主图的媒体引用并在 Chrome 边界内物化为临时本地文件；完整 data URI 不进入日志或任务状态。
 - 标签页缺失、关闭、非 Grok、未登录或无法重新证明批次身份时停止。
 - 恢复时重新绑定同一用户提供的标签页；浏览器对象从不落盘。
 - 页面结构无法识别时返回 `ui-changed`，不尝试其他浏览器实现。
@@ -89,6 +91,7 @@ Skill 不负责：
 Codex 根据父级任务、目标版位、参考图和已知设计上下文自行形成 Grok 提示词。这是任务执行的一部分，不是对用户提示词运行通用优化器。
 
 - 默认使用速度档。
+- 每次提交前把 Grok“图像数量”显式设为 `×2` 并验证生效；不得保留“自动模式”，避免一次提交生成超出二选一需要的资产。
 - 只有任务明确要求质量档时选择质量。
 - 支持 Grok 页面提供的 `1:1 / 2:3 / 3:2 / 9:16 / 16:9`。
 - 不支持的比例返回 `invalid-aspect`。
@@ -134,7 +137,7 @@ preparing
 ## 10. AI 主导工作流
 
 1. 创建批次并进入 `generating`。
-2. Codex 在 Grok 提交任务提示词和可选参考图。
+2. Codex 先把 Grok 图像数量设为 `×2`，再提交任务提示词和可选参考图。
 3. 收集当前批次的真实原图，按页面顺序去重。
 4. 只有两张候选均通过硬文件校验后才交给 Codex。
 5. Codex基于当前任务做整体视觉二选一，不运行通用逐项语义验收器。
@@ -150,7 +153,7 @@ preparing
 
 1. 提交后冻结当前批次，进入 `awaiting-user-selection`。
 2. 用户在 Grok 打开本批目标图并回复“选好了”。
-3. Skill 验证当前 Post/资产属于本批并触发原图下载。
+3. Skill 验证当前 Post/资产属于本批，并优先通过 Chrome 主图媒体接口物化原图；页面下载按钮只作一次兜底。
 4. CLI 校验并写入 `chosen.jpg`，记录 `chosenBy=user`。
 
 历史 Post、未加载图片或批次不匹配分别返回明确错误，不刷新页面、不猜测。
@@ -172,7 +175,7 @@ preparing
 - 文件非空、传输完整、可解码。
 - MIME、魔数和扩展名一致。
 - JPEG、PNG、WebP 元数据合法且尺寸有效。
-- 非模糊预览、占位 data URI、缩略图或历史重复图。
+- 非模糊预览、未物化的浏览器引用、缩略图或历史重复图。
 
 候选保留 Grok 原始格式和字节。最终 `out` 支持 `.jpg/.jpeg/.png/.webp`，使用真实编解码转换；默认 `chosen.jpg`。不得通过改后缀、截图或生成纯色像素满足格式测试。
 
@@ -198,7 +201,7 @@ CLI 使用单次进程和 JSON 输出，不监听端口。计划命令：
 
 ## 14. 全局安装和开关
 
-仓库保存 Grok Skill 源码、安装脚本和切换脚本。安装脚本把 Skill 安装到用户级 Codex Skill 目录；切换脚本只管理带明确 begin/end 标记的 Codex 配置块。
+仓库保存 Web ImageGen Skill 源码、供应商指令、安装脚本和切换脚本。安装脚本把 Skill 安装到用户级 Codex Skill 目录；切换脚本只管理带明确 begin/end 标记的 Codex 配置块。
 
 安全规则：
 
@@ -212,7 +215,7 @@ CLI 使用单次进程和 JSON 输出，不监听端口。计划命令：
 
 保留 kebab-case 闭集错误，包括：
 
-`login-wall`、`timeout`、`quota`、`blocked`、`ui-changed`、`busy`、`batch-pending`、`no-job`、`ref-missing`、`prompt-required`、`workspace-required`、`unknown-id`、`invalid-out-format`、`invalid-aspect`、`invalid-quality`、`ids-required`、`insufficient-candidates`、`selection-not-ready`、`selection-stale`、`selection-expired`。
+`login-wall`、`timeout`、`quota`、`blocked`、`ui-changed`、`busy`、`batch-pending`、`no-job`、`ref-missing`、`prompt-required`、`workspace-required`、`unknown-id`、`invalid-out-format`、`invalid-aspect`、`invalid-quality`、`ids-required`、`insufficient-candidates`、`selection-not-ready`、`selection-stale`、`selection-expired`、`download-missing`、`download-ambiguous`。
 
 默认 `debug.json` 只保存 URL 的非敏感路径、状态、候选数量、尺寸、MIME 和失败步骤。不保存完整 HTML、Cookie、账号信息、浏览器存储或全页截图。额外截图必须先获得用户许可。
 
@@ -238,7 +241,7 @@ CLI 使用单次进程和 JSON 输出，不监听端口。计划命令：
 - 文档只描述 Codex 全局 Skill 架构，历史问题文档明确标记为历史。
 - `playwright` 依赖和所有浏览器/profile/daemon 代码删除。
 - OpenCode、ChatGPT provider 和兼容协议删除。
-- Grok Skill 通过官方 Skill 结构校验。
+- Web ImageGen Skill 通过官方 Skill 结构校验。
 - 全局安装/切换脚本可在临时配置根完成离线测试。
 - `npm test` 全绿。
 - 未经额度许可不运行真实 Grok 提交。

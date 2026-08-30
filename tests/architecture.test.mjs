@@ -17,6 +17,7 @@ function filesUnder(dir) {
 
 test("runtime has one local backend and no retired browser stack", () => {
   const packageJson = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"))
+  assert.equal(packageJson.name, "web-imagegen")
   assert.deepEqual(Object.keys(packageJson.dependencies), ["sharp"])
   for (const retired of ["browser.mjs", "daemon.mjs", "generate.mjs", "chatgpt.mjs"]) {
     assert.equal(filesUnder(join(ROOT, "src")).some((path) => path.endsWith(retired)), false)
@@ -24,14 +25,23 @@ test("runtime has one local backend and no retired browser stack", () => {
   const code = filesUnder(join(ROOT, "src")).concat(filesUnder(join(ROOT, "scripts"))).filter((path) => path.endsWith(".mjs")).map((path) => readFileSync(path, "utf8")).join("\n")
   assert.doesNotMatch(code, /from\s+["']playwright["']/i)
   assert.doesNotMatch(code, /chromium\.launch|connectOverCDP|createServer\s*\(/i)
+  assert.doesNotMatch(code, /\bfetch\s*\(|https?\.request\s*\(/i)
 })
 
-test("Skill is a thin Grok/Chrome orchestrator with the required resources", () => {
-  const skillDir = join(ROOT, "skill", "grok-imagegen")
+test("Web ImageGen Skill exposes the current Grok/Chrome provider", () => {
+  const skillDir = join(ROOT, "skill", "web-imagegen")
   const skill = readFileSync(join(skillDir, "SKILL.md"), "utf8")
-  assert.match(skill, /^---\r?\nname: grok-imagegen\r?\ndescription:/)
-  assert.match(skill, /explicitly supplied, signed-in Grok Chrome tab/)
+  assert.match(skill, /^---\r?\nname: web-imagegen\r?\ndescription:/)
+  assert.match(skill, /current Grok provider/)
   assert.match(skill, /Never call built-in `image_gen`/)
+  assert.match(skill, /Browser media becomes eligible only after Chrome materializes it/)
+  const runtime = readFileSync(join(skillDir, "references", "runtime.md"), "utf8")
+  assert.match(runtime, /snapshotDownloads/)
+  assert.match(runtime, /downloadMedia\(\)/)
+  assert.match(runtime, /Never navigate to an asset URL, call `fetch`, replay Grok HTTP requests/)
+  const aiLed = readFileSync(join(skillDir, "references", "ai-led.md"), "utf8")
+  assert.match(aiLed, /select `×2`/)
+  assert.match(aiLed, /Never leave AI-led generation in `自动模式`/)
   assert.equal(filesUnder(skillDir).some((path) => path.endsWith(join("scripts", "cli.mjs"))), true)
   assert.equal(filesUnder(skillDir).filter((path) => path.endsWith(".md")).length, 4)
 })

@@ -61,6 +61,8 @@ export const ERRORS = Object.freeze([
   "invalid-size",
   "ext-mismatch",
   "preview-size",
+  "download-missing",
+  "download-ambiguous",
   "runtime-failed",
 ])
 

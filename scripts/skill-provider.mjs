@@ -3,10 +3,10 @@ import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-const MANAGED_START = "# BEGIN grok-imagegen-provider"
-const MANAGED_END = "# END grok-imagegen-provider"
+const MANAGED_START = "# BEGIN web-imagegen-provider"
+const MANAGED_END = "# END web-imagegen-provider"
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
-export const SOURCE_SKILL_DIR = resolve(SCRIPT_DIR, "..", "skill", "grok-imagegen")
+export const SOURCE_SKILL_DIR = resolve(SCRIPT_DIR, "..", "skill", "web-imagegen")
 
 function fail(error, detail, extra = {}) {
   const e = new Error(detail || error)
@@ -48,7 +48,7 @@ function tomlString(value) {
   return `"${String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
 }
 
-function managedBlock(provider, officialSkill, grokSkill) {
+function managedBlock(provider, officialSkill, webSkill) {
   const grok = provider === "grok"
   return [
     MANAGED_START,
@@ -57,7 +57,7 @@ function managedBlock(provider, officialSkill, grokSkill) {
     `enabled = ${grok ? "false" : "true"}`,
     "",
     "[[skills.config]]",
-    `path = ${tomlString(normalizedPath(grokSkill))}`,
+    `path = ${tomlString(normalizedPath(webSkill))}`,
     `enabled = ${grok ? "true" : "false"}`,
     MANAGED_END,
   ].join("\n")
@@ -90,11 +90,11 @@ function ensureNoExternalConflict(before, after, paths) {
   }
 }
 
-export function renderProviderConfig(current, provider, officialSkill, grokSkill) {
+export function renderProviderConfig(current, provider, officialSkill, webSkill) {
   if (provider !== "grok" && provider !== "openai") fail("invalid-provider", `unsupported provider: ${provider}`)
   const parts = splitManagedConfig(current)
-  ensureNoExternalConflict(parts.before, parts.after, [officialSkill, grokSkill])
-  const sections = [parts.before, managedBlock(provider, officialSkill, grokSkill), parts.after].filter(Boolean)
+  ensureNoExternalConflict(parts.before, parts.after, [officialSkill, webSkill])
+  const sections = [parts.before, managedBlock(provider, officialSkill, webSkill), parts.after].filter(Boolean)
   return `${sections.join("\n\n")}\n`
 }
 
@@ -110,7 +110,7 @@ function resolveInstalledLink(target) {
 
 export function installSkill(opts = {}) {
   const { codexRoot } = roots(opts)
-  const target = join(codexRoot, "skills", "grok-imagegen")
+  const target = join(codexRoot, "skills", "web-imagegen")
   if (!existsSync(SOURCE_SKILL_DIR)) fail("skill-source-missing", SOURCE_SKILL_DIR)
 
   if (existsSync(target)) {
@@ -132,13 +132,13 @@ export function switchProvider(provider, opts = {}) {
   const { codexRoot } = roots(opts)
   const configPath = join(codexRoot, "config.toml")
   const officialSkill = join(codexRoot, "skills", ".system", "imagegen", "SKILL.md")
-  const grokSkill = join(codexRoot, "skills", "grok-imagegen", "SKILL.md")
+  const webSkill = join(codexRoot, "skills", "web-imagegen", "SKILL.md")
 
   if (!existsSync(officialSkill)) fail("official-imagegen-missing", officialSkill)
-  if (!existsSync(grokSkill)) fail("grok-imagegen-missing", `${grokSkill}; run skill:install first`)
+  if (!existsSync(webSkill)) fail("web-imagegen-missing", `${webSkill}; run skill:install first`)
 
   const current = existsSync(configPath) ? readFileSync(configPath, "utf8") : ""
-  const next = renderProviderConfig(current, provider, officialSkill, grokSkill)
+  const next = renderProviderConfig(current, provider, officialSkill, webSkill)
   const changed = next !== current
   if (changed && !opts.dryRun) {
     mkdirSync(dirname(configPath), { recursive: true })
@@ -150,7 +150,7 @@ export function switchProvider(provider, opts = {}) {
     changed,
     configPath,
     officialSkill,
-    grokSkill,
+    webSkill,
     restartRequired: true,
   }
 }
@@ -159,7 +159,7 @@ export function providerStatus(opts = {}) {
   const { codexRoot } = roots(opts)
   const configPath = join(codexRoot, "config.toml")
   const officialSkill = join(codexRoot, "skills", ".system", "imagegen", "SKILL.md")
-  const grokSkill = join(codexRoot, "skills", "grok-imagegen", "SKILL.md")
+  const webSkill = join(codexRoot, "skills", "web-imagegen", "SKILL.md")
   const current = existsSync(configPath) ? readFileSync(configPath, "utf8") : ""
   const { managed } = splitManagedConfig(current)
   let provider = null
@@ -167,10 +167,10 @@ export function providerStatus(opts = {}) {
     const entries = managed.split(/\[\[skills\.config\]\]/i).slice(1)
     const enabledPath = entries.find((entry) => /enabled\s*=\s*true/i.test(entry)) || ""
     const normalized = enabledPath.replaceAll("\\", "/").toLowerCase()
-    if (normalized.includes(normalizedPath(grokSkill).toLowerCase())) provider = "grok"
+    if (normalized.includes(normalizedPath(webSkill).toLowerCase())) provider = "grok"
     else if (normalized.includes(normalizedPath(officialSkill).toLowerCase())) provider = "openai"
   }
-  return { status: "ok", provider, configPath, installed: existsSync(grokSkill), restartRequired: false }
+  return { status: "ok", provider, configPath, installed: existsSync(webSkill), restartRequired: false }
 }
 
 export async function main(argv = process.argv.slice(2)) {

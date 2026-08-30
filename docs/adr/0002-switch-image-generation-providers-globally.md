@@ -1,3 +1,3 @@
 # Switch image generation providers globally
 
-OpenAI ImageGen and Grok ImageGen are mutually exclusive global Codex skills rather than prompt-routed backends inside one skill. A user-invoked switch enables one skill and disables the other in Codex configuration, then requires a Codex restart; this makes ordinary image requests use the selected provider without prompt conventions, prevents overlapping skill activation, and keeps the Grok skill free of an OpenAI fallback.
+Web ImageGen uses an explicit global Generation Provider switch rather than prompt-routed or fallback backends. The current choices are official OpenAI ImageGen and the Web ImageGen Skill configured for Grok; a user-invoked switch enables exactly one path in Codex configuration and then requires a Codex restart. Future provider integrations may add explicit switch values, but they must preserve mutual exclusion, supplier-specific boundaries, and visible failures.

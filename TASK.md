@@ -1,4 +1,4 @@
-# Codex Grok ImageGen 实施清单
+# Web ImageGen for Codex 实施清单
 
 ## 执行纪律
 
@@ -11,16 +11,17 @@
 ## D. 文档迁移
 
 - [x] 新增 README，说明前置条件、安装、全局切换、工作流和隐私边界。
-- [x] 重写 DESIGN，建立全局 provider 与 Grok workflow 两层模型。
+- [x] 重写 DESIGN，建立全局 Generation Provider 与 Workflow Mode 两层模型。
 - [x] 重写 TASK 和 BREAKPOINT。
 - [x] 将历史 issues 改成“事实与保留不变量”，删除旧实现指令。
 - [x] 建立领域词汇表和架构决策记录。
 - [x] 全文审计：旧术语只允许出现在“已删除/历史”语境。
 
-## S1. Skill 骨架
+## S1. Web ImageGen Skill 骨架
 
-- [x] 创建 `grok-imagegen` Skill，包含 `SKILL.md` 与 `agents/openai.yaml`。
-- [x] 描述覆盖普通位图生图请求，使 Grok 模式无需提示词约定。
+- [x] 创建 `web-imagegen` Skill，包含 `SKILL.md` 与 `agents/openai.yaml`。
+- [x] 使用供应商中立的项目与 Skill 名称；当前实现明确标记为 Grok Provider Integration。
+- [x] 描述覆盖普通位图生图请求，使当前供应商无需提示词约定。
 - [x] Skill 明确依赖已连接的 Codex Chrome 能力，但不声明 MCP dependency。
 - [x] 分离 AI 主导与用户主导条件指令，避免加载无关细节。
 - [x] 使用 `quick_validate.py` 验证 Skill。
@@ -63,7 +64,7 @@
 - [x] Skill 只允许使用用户明确提供的 Chrome Grok 标签页。
 - [x] Skill 要求检查 Grok Imagine 与登录状态。
 - [x] Skill 编排提示词提交、参考图上传、AI 页面选项和用户页面控制。
-- [x] Skill 只认当前批次稳定资产，触发原图下载并交给 CLI。
+- [x] Skill 只认当前批次稳定资产，经 Chrome 媒体接口物化原图并交给 CLI。
 - [x] Chrome/Grok/UI 失败时返回明确错误，不降级。
 - [x] 默认诊断脱敏，截图另行授权。
 
@@ -81,15 +82,27 @@
 - [x] 增加 Skill、全局开关、CLI 和静态架构测试。
 - [x] 增加真实转码、完整解码、预览拒绝和原始候选保留测试。
 - [x] 保留状态机、候选过滤、路径、单选/组选和幂等测试语义。
-- [x] `npm test` 全绿（20/20）。
+- [x] `npm test` 全绿（23/23）。
 - [x] `quick_validate.py` 全绿。
 
 ## S9. 用户授权后的真实验证
 
-- [ ] 安装全局 Skill 并切到 Grok，重启 Codex。
-- [ ] 用户连接 Chrome 扩展并提供已登录 Grok 标签页。
-- [ ] 运行一次不带参考图的 AI 主导二选一。
-- [ ] 运行一次用户主导选择。
-- [ ] 机会性验证参考图、恢复或 `refine=1`，不为覆盖率额外消耗额度。
+- [x] 安装全局 Skill 并切到 Grok；等待本次配置后的 Codex 重启。
+- [x] 用户连接 Chrome 扩展并提供已登录 Grok 标签页。
+- [x] 运行一次不带参考图的 AI 主导二选一。
+- [x] 运行一次用户主导选择。
+- [x] 机会性验证参考图上传与用户主导单选；页面资产接口保存 1008×1792 JPEG。
+- [x] 机会性验证跨回合断点恢复：新进程读取 `chosen` 状态并幂等重放同一选择，不重复下载或改写。
+- [x] 机会性验证 `refine=1`：预算为 1，初始两张候选可用时正确停止，`refinementUsed=0`，未浪费额外提交。
 
 S9 不属于默认实现门禁；未授权时以离线验证完成交付。
+
+## S10. Chrome 原图物化优化
+
+- [x] 优先使用页面资产或主图 `downloadMedia()`，不重放 Grok HTTP 请求。
+- [x] 页面下载按钮只允许一次兜底，不盲目重试。
+- [x] 使用动作前后下载目录快照和冻结 Post UUID 解析唯一文件，不按时间猜测。
+- [x] 快照调用必须提供冻结 Post UUID，助手不返回无关下载文件名。
+- [x] 两级下载幂等无变化时，只允许复用唯一精确 UUID 文件并重新执行硬校验。
+- [x] 增加新文件、历史文件、唯一复用和多副本歧义的离线回归。
+- [x] 使用已选真实帖子完成回归；未新增 Grok 提交，运行时幂等返回原有 768×1152 JPEG。

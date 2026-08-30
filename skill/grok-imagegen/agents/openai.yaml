@@ -1,6 +1,0 @@
-interface:
-  display_name: "Grok ImageGen"
-  short_description: "Generate project images through your signed-in Grok tab"
-  default_prompt: "Use $grok-imagegen to create and save an image for this project through Grok."
-policy:
-  allow_implicit_invocation: true
