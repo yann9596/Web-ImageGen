@@ -56,6 +56,7 @@ export function candidateIdentityKeys(items) {
   for (const item of items || []) {
     const asset = item?.asset || item || {}
     addIdentity(out, item?.key)
+    addIdentity(out, item?.providerAssetKey)
     addIdentity(out, item?.src || item?.url)
     addIdentity(out, item?.assetId || asset?.assetId)
     addIdentity(out, item?.responseId || asset?.responseId)
