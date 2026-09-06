@@ -9,8 +9,12 @@ The provider-neutral Codex image-generation capability delivered by this project
 _Avoid_: Provider-specific project names, browser generator, provider name
 
 **Generation Provider**:
-The one globally selected capability that produces raster images for Codex. Current values are OpenAI ImageGen and Grok; the set may grow without changing the Web ImageGen identity.
+The one globally selected capability that produces raster images for Codex. The canonical values are Default, Grok, and GPT Web; the set may grow without changing the Web ImageGen identity.
 _Avoid_: Browser backend, workflow mode, fallback
+
+**Default Provider**:
+The official image-generation capability built into Codex. Its switch value is `default`; it is distinct from the browser-controlled GPT Web Provider Integration even though both use OpenAI products.
+_Avoid_: OpenAI provider, built-in provider, ChatGPT provider
 
 **Provider Integration**:
 A supplier-specific generation boundary selected explicitly as a Generation Provider. Provider integrations do not silently route to or fall back to one another.
@@ -20,9 +24,17 @@ _Avoid_: Compatibility layer, fallback backend, automatic route
 The user's global choice of Generation Provider. Exactly one provider is active, and the choice is not inferred from an image prompt.
 _Avoid_: Workflow switch, automatic routing, fallback chain
 
+**GPT Web Provider Integration**:
+The planned browser-controlled integration that generates images in a user-supplied, authenticated ChatGPT web tab. Its switch value is `gpt`; it is separate from the Default Provider.
+_Avoid_: ChatGPT provider, OpenAI provider, Default Provider
+
 **Generation Batch**:
-A single provider generation request and the candidate images produced for that request.
+A provider-neutral request for one visual outcome and the candidate images collected for it. A batch may use a bounded number of Provider Attempts when the active provider cannot produce the requested candidate count atomically.
 _Avoid_: Job, run, response
+
+**Provider Attempt**:
+One prompt submission to the active Provider Integration within a Generation Batch. Attempt limits are explicit so a provider with variable output count cannot spend quota indefinitely.
+_Avoid_: Batch, retry, fallback
 
 **Candidate Image**:
 A validated image belonging to the current generation batch and eligible for selection.

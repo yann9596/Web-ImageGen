@@ -2,19 +2,21 @@
 
 Web ImageGen 是面向 Codex 的供应商中立生图项目。它提供统一的全局安装、供应商切换、批次状态、图片校验、选择和项目落盘能力；每个供应商只实现自己的生图边界。
 
-当前版本实现 `grok` 供应商：Codex 接管用户明确指定、已经登录的 Chrome Grok 标签页完成生图。后续可以增加其他供应商，但任一时刻仍只启用一个 Generation Provider，不做隐式路由或失败降级。
+当前版本实现 `grok` 供应商：Codex 接管用户明确指定、已经登录的 Chrome Grok 标签页完成生图。下一供应商 `gpt` 已完成架构设计但尚未实现；它代表浏览器里的 ChatGPT Images，与 Codex 内置的 `default` 生图是不同路径。任一时刻仍只启用一个 Generation Provider，不做隐式路由或失败降级。
 
 ## 当前架构
 
 ```text
 全局 Generation Provider
-├─ openai → 官方 ImageGen Skill → 内置 image_gen
-└─ grok   → Web ImageGen Skill  → Codex Chrome → 用户指定的 Grok 标签页
-                                      ↓
-                               本地状态/校验/落盘 CLI
+├─ default → 官方 ImageGen Skill → Codex 内置 image_gen（命名待迁移）
+└─ Web ImageGen Skill
+   ├─ grok                 → Codex Chrome → 用户指定的 Grok 标签页（已实现）
+   └─ gpt                  → Codex Chrome → 用户指定的 ChatGPT 标签页（已设计）
+       ↓
+   共享本地状态/校验/落盘 CLI
 ```
 
-- `Web ImageGen` 是稳定的项目和 Skill 名称，`grok` 是当前供应商标识。
+- `Web ImageGen` 是稳定的项目和 Skill 名称；规范 provider 值为 `default | grok | gpt`。
 - 官方 OpenAI ImageGen 与 Web ImageGen Skill 全局互斥，不靠提示词路由。
 - 当前 Grok 实现只有 Codex Chrome 一个浏览器边界。
 - 不使用 MCP、Playwright、CDP、自管 Chromium、独立 profile 或 HTTP daemon。
@@ -44,10 +46,10 @@ npm run skill:install
 npm run provider:grok
 ```
 
-切回官方 OpenAI ImageGen：
+切回官方 Default Provider（内置 ImageGen）：
 
 ```console
-npm run provider:openai
+npm run provider:default
 ```
 
 查看当前状态：
@@ -56,7 +58,7 @@ npm run provider:openai
 npm run provider:status
 ```
 
-切换后重启 Codex。切换命令只管理 Web ImageGen 自己的配置块；遇到同一路径的外部配置冲突时停止，不覆盖用户配置。
+切换后重启 Codex。切换命令只管理 Web ImageGen 自己的配置块与 `<CODEX_ROOT>/web-imagegen/provider.json`；遇到同一路径的外部配置冲突或不一致状态时停止，不覆盖用户配置。公开 CLI 暂不提供 `provider:gpt`（返回 `provider-not-ready`），待 GPT runtime 与 Skill 路由完成后再开放。
 
 ## 当前 Grok 工作流
 
@@ -102,6 +104,15 @@ npm run provider:status
 ## 扩展新供应商
 
 新增供应商时，应增加独立的供应商编排和显式 provider 值，并复用本地状态、校验和落盘核心。不得把多个供应商同时启用、按提示词猜测供应商，或在失败后静默切换供应商。
+
+GPT Web Provider Integration 的文档：
+
+- [总体设计](./docs/gpt-provider-design.md)
+- [详细代码设计](./docs/gpt-provider-implementation-design.md)
+- [测试与验证方案](./docs/gpt-provider-test-plan.md)
+- [单步实施任务](./docs/gpt-provider-tasks.md)
+
+`provider:default` 与 `provider:grok` 已可在隔离/`--codex-root` 环境下运行；公开 `provider:gpt` 仍未发布。
 
 ## 测试
 

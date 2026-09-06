@@ -1,12 +1,13 @@
 # 当前接续点
 
-更新时间：2026-08-30
+更新时间：2026-09-05
 
 ## 已确认架构
 
 - 项目与全局 Skill 的稳定名称为 Web ImageGen；当前只实现 Grok Provider Integration。
 - 全局开关使官方 OpenAI ImageGen 与 Web ImageGen Skill 互斥；切换后重启 Codex。
 - 后续供应商使用新的显式 provider 值和独立集成加入，不改变项目名称、不隐式路由或降级。
+- provider 规范值为 `default | grok | gpt`：`default` 是 Codex 内置生图，`gpt` 是新的 GPT 网页供应商。Phase A（命名/状态/安全切换）已完成；公开 CLI 仍对 `gpt` 返回 `provider-not-ready`。
 - Grok 模式只支持 ChatGPT 桌面应用中的 Codex + Chrome 扩展。
 - 只操作用户明确提供且已登录的 Grok 标签页。
 - 无 Playwright、CDP、自管 Chromium/profile、HTTP daemon、第二浏览器后端或失败降级。
@@ -20,12 +21,13 @@
 
 ## 离线验证
 
-迁移前离线基线为 85/85；迁移后测试已按新架构改写，当前 `npm test` 为 23/23。官方 `quick_validate.py` 返回 `Skill is valid!`。
+迁移前离线基线为 85/85；迁移后测试已按新架构改写。Phase A 完成后当前 `npm test` 为 37/37。官方 `quick_validate.py` 返回 `Skill is valid!`。
 
 已完成：
 
 - `skill/web-imagegen/`：供应商中立入口、当前 Grok Chrome 编排和两种工作流。
-- `scripts/skill-provider.mjs`：用户级安装及 OpenAI/Grok 全局互斥开关。
+- `scripts/skill-provider.mjs`：用户级安装及 `default | grok | gpt` 三值切换（公开 CLI 暂拒 `gpt`）。
+- `src/provider-config.mjs` / `src/atomic-file.mjs`：Provider 状态纯函数与原子写。
 - `scripts/web-imagegen.mjs`：一次性 JSON CLI。
 - `src/runtime.mjs`：批次编排、锁、恢复、候选冻结和落盘。
 - `src/jobs.mjs`、`src/candidates.mjs`、`src/paths.mjs`、`src/select.mjs`：迁移后的纯状态与校验核心。
@@ -52,3 +54,10 @@
 当前计划内真实验证均已完成；后续仅在出现新的真实场景或回归需求时追加。
 
 未经用户另行许可，不修改真实 Codex 配置、不额外提交真实 Grok 任务。
+
+## 下一接续点：GPT Web Provider Phase B
+
+- Phase A（GPT-001～009）已完成。下一从 [GPT-010](./docs/gpt-provider-tasks.md) 开始，严格按单步任务顺序推进；每一步都先跑定向测试再跑 `npm test`。
+- 代码模块、数据结构和 CLI 契约以 [详细代码设计](./docs/gpt-provider-implementation-design.md)为准。
+- 测试编号、故障注入和真实提交预算以 [测试与验证方案](./docs/gpt-provider-test-plan.md)为准。
+- Phase B～G 只使用临时目录和离线 fixture；Phase H 每个真实场景分别获得明确提交次数授权。

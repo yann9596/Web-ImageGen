@@ -106,3 +106,37 @@ S9 不属于默认实现门禁；未授权时以离线验证完成交付。
 - [x] 两级下载幂等无变化时，只允许复用唯一精确 UUID 文件并重新执行硬校验。
 - [x] 增加新文件、历史文件、唯一复用和多副本歧义的离线回归。
 - [x] 使用已选真实帖子完成回归；未新增 Grok 提交，运行时幂等返回原有 768×1152 JPEG。
+
+## S11. GPT Web Provider 设计
+
+- [x] 将 Codex 内置生图规范为 `default`，新的 GPT 网页供应商规范为 `gpt`。
+- [x] 设计单 Web ImageGen Skill 下的显式 Provider Router 与三值全局开关。
+- [x] 设计 job provider 冻结、Provider Attempt 预算和 ChatGPT 响应资产身份链。
+- [x] 设计专用空白对话、外部页面不可信、登录/付款暂停和隐私边界。
+- [x] 设计 AI 二选一、用户单张/组图、参考图和原图物化流程。
+- [x] 记录提案 ADR 与实现前验收标准。
+- [x] 写明模块拆分、job schema v2、attempt 状态机、CLI JSON 契约和迁移策略。
+- [x] 写明离线测试矩阵、故障注入、调试顺序和逐项授权的真实验证方案。
+- [x] 拆分 GPT-001～GPT-046 单步任务，每步包含依赖、改动、测试、调试和完成条件。
+
+## S12. GPT Web Provider 实施
+
+详细执行顺序见 [docs/gpt-provider-tasks.md](./docs/gpt-provider-tasks.md)，测试编号见 [docs/gpt-provider-test-plan.md](./docs/gpt-provider-test-plan.md)。每项只能在自己的定向测试和 `npm test` 同时通过后勾选。
+
+- [x] Phase A（GPT-001～009）：Provider 命名、状态和安全切换。
+  - [x] GPT-001 规范值 `default | grok | gpt`（`src/provider-config.mjs` / PC-01）
+  - [x] GPT-002 `provider.json` 编解码（PC-02）
+  - [x] GPT-003 Skill/provider 一致性（PC-03）
+  - [x] GPT-004 旧 Grok/default 只读兼容（PC-04）
+  - [x] GPT-005 单文件原子写（`src/atomic-file.mjs`）
+  - [x] GPT-006 安全切换计划（`planProviderSwitch`）
+  - [x] GPT-007 三值切换执行（PS-01～04）
+  - [x] GPT-008 切换中断注入（PS-05）
+  - [x] GPT-009 `provider:default` 发布门；公开 CLI 拒绝 `gpt`/`openai`（PS-06/07）
+- [ ] Phase B（GPT-010～017）：job schema v2 与 Provider Attempt。
+- [ ] Phase C（GPT-018～021）：Grok/GPT 资产身份模块。
+- [ ] Phase D（GPT-022～025）：下载快照、resolver 与候选准入。
+- [ ] Phase E（GPT-026～032）：Grok 回归及 GPT 三种 workflow。
+- [ ] Phase F（GPT-033～036）：Skill provider 路由。
+- [ ] Phase G（GPT-037～040）：离线总验收与 GPT 命令发布门。
+- [ ] Phase H（GPT-041～046）：逐项授权的真实浏览器验证与收尾。
