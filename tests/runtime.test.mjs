@@ -93,13 +93,18 @@ test("AI flow retries once, merges unique originals, chooses one, and replays id
   assert.equal(ready.rejected.every((item) => item.name && !("path" in item)), true)
   assert.equal(readJobFile(initialized.jobDir).attempts.find((item) => item.attemptId === attemptId).status, "collected")
 
-  const chosen = await chooseJob(initialized.jobDir, { source: "candidates", ids: "2", by: "agent" })
+  const jobAfter = readJobFile(initialized.jobDir)
+  assert.equal(jobAfter.attempts.filter((item) => item.synthetic !== true).length, 1)
+  assert.equal(jobAfter.attempts[0].purpose, "initial")
+  assert.equal(ready.baseRemaining, 0)
+
+  const chosen = await chooseJob(initialized.jobDir, { source: "candidates", ids: "2", by: "agent", provider: "grok" })
   assert.equal(chosen.status, "chosen")
   assert.equal(chosen.chosenId, "2")
   assert.equal(inspectImage(readFileSync(chosen.saved[0].path)).type, "image/jpeg")
   assert.equal(existsSync(ready.candidates[0].path), true)
 
-  const replay = await chooseJob(initialized.jobDir, { source: "candidates", ids: "2", by: "agent" })
+  const replay = await chooseJob(initialized.jobDir, { source: "candidates", ids: "2", by: "agent", provider: "grok" })
   assert.equal(replay.idempotent, true)
   assert.deepEqual(replay.saved, chosen.saved)
 })
@@ -121,7 +126,7 @@ test("user group accepts an incomplete set and can save all", async () => {
   assert.equal(ready.incomplete, true)
   assert.equal(ready.candidates[0].provider, "grok")
   assert.equal(ready.candidates[0].attemptId, attemptId)
-  const result = await chooseJob(initialized.jobDir, { source: "candidates", ids: "all", by: "user" })
+  const result = await chooseJob(initialized.jobDir, { source: "candidates", ids: "all", by: "user", provider: "grok" })
   assert.equal(result.chosenBy, "user")
   assert.equal(result.saved.length, 1)
 })
@@ -142,8 +147,11 @@ test("user single freezes batch identities before accepting the selected origina
   const waiting = await collectJob(initialized.jobDir, manifest)
   assert.equal(waiting.status, "awaiting-user-selection")
   assert.equal(readJobFile(initialized.jobDir).attempts.find((item) => item.attemptId === attemptId).status, "collected")
-  await assert.rejects(() => chooseJob(initialized.jobDir, { source: "post", file: selected, key: "historic", by: "user" }), (error) => error.code === "selection-stale")
-  const result = await chooseJob(initialized.jobDir, { source: "post", file: selected, key, by: "user" })
+  await assert.rejects(
+    () => chooseJob(initialized.jobDir, { source: "post", file: selected, key: "historic", by: "user", provider: "grok" }),
+    (error) => error.code === "selection-stale",
+  )
+  const result = await chooseJob(initialized.jobDir, { source: "post", file: selected, key, by: "user", provider: "grok" })
   assert.equal(result.status, "chosen")
 })
 
@@ -164,9 +172,16 @@ test("refine redraw is budgeted and creates a versioned job", async () => {
     ],
   })
   await collectJob(initialized.jobDir, manifest)
-  const redraw = redrawJob(initialized.jobDir, { refine: true, reason: "both unusable", prompt: "poster with clearer focal hierarchy" })
+  const redraw = redrawJob(initialized.jobDir, {
+    refine: true,
+    reason: "both unusable",
+    prompt: "poster with clearer focal hierarchy",
+    provider: "grok",
+  })
   assert.equal(redraw.refinementUsed, 1)
   assert.equal(redraw.prompt, "poster with clearer focal hierarchy")
+  assert.equal(redraw.provider, "grok")
+  assert.equal(redraw.attemptCount, 0)
   assert.notEqual(redraw.jobDir, initialized.jobDir)
   assert.match(redraw.jobDir, /-V2/)
   assert.equal(statusJob({ jobDir: initialized.jobDir }).state, "redraw")
@@ -218,9 +233,9 @@ test("a lost Chrome batch identity becomes selection-expired", async () => {
   const workspace = mkdtempSync(join(tmpdir(), "web-imagegen-runtime-"))
   const request = writeJson(requestPath(workspace), { workspace, provider: "grok", prompt: "single", workflow: "user", selection: "single", sessionID: "task-expire", goal: "single" })
   const initialized = await initFromRequest(request)
-  const expired = expireJob(initialized.jobDir, { reason: "tab-closed" })
+  const expired = expireJob(initialized.jobDir, { reason: "tab-closed", provider: "grok" })
   assert.equal(expired.state, "selection-expired")
-  assert.equal(expireJob(initialized.jobDir).idempotent, true)
+  assert.equal(expireJob(initialized.jobDir, { provider: "grok" }).idempotent, true)
 })
 
 test("GPT-025 collect rejects unbound, wrong provider, unknown asset, and records basename-only rejects", async () => {

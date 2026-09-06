@@ -44,6 +44,17 @@ test("user workflow requires selection and never controls quality or aspect", ()
   assert.equal(result.value.aspect, "auto")
   assert.equal(result.value.clickQuality, null)
   assert.equal(result.value.clickAspect, null)
+  assert.equal(
+    validateInit({
+      workspace: "D:/work",
+      prompt: "too many",
+      workflow: "user",
+      provider: "gpt",
+      selection: "group",
+      count: 5,
+    }).error,
+    "invalid-request",
+  )
 })
 
 test("output and selection contract is closed and idempotent", () => {

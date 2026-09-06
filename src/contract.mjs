@@ -164,6 +164,10 @@ export function validateInit(input = {}) {
   if (!QUALITIES.includes(quality)) return failure("invalid-quality")
   if (!ASPECTS.includes(aspect)) return failure("invalid-aspect")
   if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > 8) return failure("invalid-request")
+  // GPT user group budget is 1–4 attempts; reject 5+ before a zero-budget job is created.
+  if (provider === "gpt" && workflow === "user" && selection === "group" && requestedCount > 4) {
+    return failure("invalid-request")
+  }
 
   const refine = input.refine === 1 || input.refine === true || input.refine === "1" ? 1 : 0
   const refFiles = Array.isArray(input.refFiles) ? input.refFiles.map(String) : input.ref ? [String(input.ref)] : []
