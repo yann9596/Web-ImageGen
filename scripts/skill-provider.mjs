@@ -17,7 +17,7 @@ const MANAGED_START = "# BEGIN web-imagegen-provider"
 const MANAGED_END = "# END web-imagegen-provider"
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 export const SOURCE_SKILL_DIR = resolve(SCRIPT_DIR, "..", "skill", "web-imagegen")
-const PUBLIC_SWITCH_COMMANDS = Object.freeze(["default", "grok"])
+const PUBLIC_SWITCH_COMMANDS = Object.freeze(["default", "grok", "gpt"])
 
 function fail(error, detail, extra = {}) {
   const e = new Error(detail || error)
@@ -452,7 +452,6 @@ export async function main(argv = process.argv.slice(2)) {
   const opts = parseArgs(argv)
   if (opts.command === "install") return installSkill(opts)
   if (opts.command === "status") return providerStatus(opts)
-  if (opts.command === "gpt") fail("provider-not-ready", "gpt provider is not publicly enabled yet")
   if (opts.command === "openai") fail("invalid-arguments", "openai is retired; use default")
   if (PUBLIC_SWITCH_COMMANDS.includes(opts.command)) return switchProvider(opts.command, opts)
   fail("invalid-arguments", `command must be install, ${PUBLIC_SWITCH_COMMANDS.join(", ")}, or status`)

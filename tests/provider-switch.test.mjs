@@ -216,18 +216,21 @@ test("PS-06 dry-run returns ordered steps without writing", () => {
   assert.equal(readFileSync(join(root, "web-imagegen", "provider.json"), "utf8"), stateBefore)
 })
 
-test("PS-07 public CLI rejects gpt and retired openai", async () => {
+test("PS-07/CLI-03 public CLI enables gpt and rejects retired openai", async () => {
   const root = makeCodexRoot()
   installSkill({ codexRoot: root })
-  await assert.rejects(() => main(["gpt", "--codex-root", root]), (error) => error.code === "provider-not-ready")
+  const gpt = await main(["gpt", "--codex-root", root])
+  assert.equal(gpt.provider, "gpt")
+  assert.equal(providerStatus({ codexRoot: root }).provider, "gpt")
+  assert.deepEqual(skillFlags(root), { official: false, web: true, other: false, enabledCount: 1 })
   await assert.rejects(() => main(["openai", "--codex-root", root]), (error) => error.code === "invalid-arguments")
 
   const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"))
   assert.equal(packageJson.scripts["provider:default"], "node scripts/skill-provider.mjs default")
   assert.equal(packageJson.scripts["provider:grok"], "node scripts/skill-provider.mjs grok")
+  assert.equal(packageJson.scripts["provider:gpt"], "node scripts/skill-provider.mjs gpt")
   assert.equal(packageJson.scripts["provider:status"], "node scripts/skill-provider.mjs status")
   assert.equal(packageJson.scripts["provider:openai"], undefined)
-  assert.equal(packageJson.scripts["provider:gpt"], undefined)
 
   const dry = spawnSync(process.execPath, [SCRIPT, "default", "--dry-run", "--codex-root", root], {
     encoding: "utf8",
@@ -236,6 +239,17 @@ test("PS-07 public CLI rejects gpt and retired openai", async () => {
   const payload = JSON.parse(dry.stdout)
   assert.equal(payload.status, "dry-run")
   assert.equal(payload.provider, "default")
+
+  const gptCli = spawnSync(process.execPath, [SCRIPT, "gpt", "--codex-root", root], {
+    encoding: "utf8",
+  })
+  assert.equal(gptCli.status, 0)
+  assert.equal(JSON.parse(gptCli.stdout).provider, "gpt")
+  const statusCli = spawnSync(process.execPath, [SCRIPT, "status", "--codex-root", root], {
+    encoding: "utf8",
+  })
+  assert.equal(statusCli.status, 0)
+  assert.equal(JSON.parse(statusCli.stdout).provider, "gpt")
 })
 
 test("legacy managed-block without provider.json reports migrationRequired", () => {

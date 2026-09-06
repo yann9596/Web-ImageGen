@@ -2,7 +2,7 @@
 
 ## 1. 目标
 
-Web ImageGen 是供应商中立的 Codex 生图项目，统一提供全局安装、供应商切换、状态机、候选校验和文件落盘能力。当前版本已实现 `grok` Provider Integration；下一供应商设计为 `gpt`，通过用户明确指定、已登录的 ChatGPT 网页标签页完成生图。`gpt` 与 Codex 内置的 `default` 生图能力是两条不同的 Generation Provider 路径。
+Web ImageGen 是供应商中立的 Codex 生图项目，统一提供全局安装、供应商切换、状态机、候选校验和文件落盘能力。当前版本已实现 `grok` 与 `gpt` 两条 Web Provider Integration（离线路径与公开切换命令）；`gpt` 通过用户明确指定、已登录的 ChatGPT 网页标签页完成生图，与 Codex 内置的 `default` 生图能力是两条不同的 Generation Provider 路径。真实浏览器冒烟仍需按 Phase H 逐项授权。
 
 系统必须保持轻量和单路径：无 MCP、无 Playwright/CDP、无自管浏览器/profile、无 HTTP daemon、无第二浏览器后端、失败不降级。
 
@@ -20,13 +20,13 @@ Web ImageGen 是供应商中立的 Codex 生图项目，统一提供全局安装
 
 ### 3.1 全局 Generation Provider
 
-全局开关规划为三个值，其中 `gpt` 尚未实现，`default` 的命名迁移尚未实施：
+全局开关为三个值；`default` 的命名迁移尚未实施：
 
 | 值 | 状态 | 启用 | 禁用 | 唯一底层能力 |
 |---|---|---|---|---|
 | `default` | 能力已实现，命名待迁移 | 官方 ImageGen Skill | Web ImageGen Skill | Codex 内置 `image_gen` |
-| `grok` | 已实现 | Web ImageGen Skill（Grok Integration） | 官方 ImageGen Skill | Codex Chrome + 用户指定的 Grok 标签页 |
-| `gpt` | 已设计 | Web ImageGen Skill（GPT Web Integration） | 官方 ImageGen Skill | Codex Chrome + 用户指定的 ChatGPT 标签页 |
+| `grok` | 已实现（含真实验证） | Web ImageGen Skill（Grok Integration） | 官方 ImageGen Skill | Codex Chrome + 用户指定的 Grok 标签页 |
+| `gpt` | 离线已发布；真实验证待授权 | Web ImageGen Skill（GPT Web Integration） | 官方 ImageGen Skill | Codex Chrome + 用户指定的 ChatGPT 标签页 |
 
 切换由用户显式运行命令完成。命令更新 Codex 的 Skill 启用配置和 Web ImageGen 自己的非敏感 provider 状态后要求重启 Codex。任何时刻只能有一个 ImageGen Skill 和一个 Provider Integration 生效；不在请求过程中按提示词路由或 fallback。后续供应商通过新的显式 Provider Integration 和 provider 值加入，不改变 `Web ImageGen` 的项目名称。
 
@@ -36,9 +36,9 @@ provider 值按用户心智命名：`default` 始终表示 Codex 默认内置生
 
 Web ImageGen Skill 内部另有 `workflow=ai|user`。首次未设置时询问一次，并在当前 Codex 任务内保持，直到用户切换。它只决定提示词归属、供应商界面控制和选图责任，不改变全局 Generation Provider。
 
-### 3.3 GPT Web Provider 设计
+### 3.3 GPT Web Provider
 
-GPT Web Integration 的总体设计见 [docs/gpt-provider-design.md](./docs/gpt-provider-design.md)，代码边界见 [docs/gpt-provider-implementation-design.md](./docs/gpt-provider-implementation-design.md)，验证方案见 [docs/gpt-provider-test-plan.md](./docs/gpt-provider-test-plan.md)，单步任务见 [docs/gpt-provider-tasks.md](./docs/gpt-provider-tasks.md)。设计阶段不修改真实 Codex 配置、不提交真实 GPT 网页生图任务，也不改变当前 Grok 运行路径。
+GPT Web Integration 的总体设计见 [docs/gpt-provider-design.md](./docs/gpt-provider-design.md)，代码边界见 [docs/gpt-provider-implementation-design.md](./docs/gpt-provider-implementation-design.md)，验证方案见 [docs/gpt-provider-test-plan.md](./docs/gpt-provider-test-plan.md)，单步任务见 [docs/gpt-provider-tasks.md](./docs/gpt-provider-tasks.md)。Phase A～G 已完成离线实现与 `provider:gpt` 发布门；Phase H 真实验证仍要求用户明确授权提交次数，默认不修改真实 Codex 配置、不提交真实 GPT 网页生图任务。
 
 ## 4. 组件与依赖方向
 
@@ -48,7 +48,7 @@ Codex task
        ├─ Provider Router                 读取显式全局 provider
        ├─ Grok Provider Integration       已实现
        │    └─ Codex Chrome skill/runtime → 用户指定的 Grok 标签页
-       ├─ GPT Web Provider Integration    已设计
+       ├─ GPT Web Provider Integration    离线已发布
        │    └─ Codex Chrome skill/runtime → 用户指定的 ChatGPT 标签页
        └─ one-shot local CLI             确定性状态与文件操作
             ├─ contract                  输入、状态、错误
@@ -215,7 +215,7 @@ CLI 使用单次进程和 JSON 输出，不监听端口。计划命令：
 
 仓库保存 Web ImageGen Skill 源码、供应商指令、安装脚本和切换脚本。安装脚本把 Skill 安装到用户级 Codex Skill 目录；切换脚本只管理带明确 begin/end 标记的 Codex 配置块。
 
-`provider:default`、`provider:gpt` 的三值切换和托管 provider 状态仍处于设计阶段，不属于当前可运行命令。
+`provider:default`、`provider:grok`、`provider:gpt` 三值切换与托管 provider 状态已可运行；切换只写托管配置块与 `provider.json`，支持 `--dry-run` 与临时 `--codex-root`。
 
 安全规则：
 

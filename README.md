@@ -2,7 +2,7 @@
 
 Web ImageGen 是面向 Codex 的供应商中立生图项目。它提供统一的全局安装、供应商切换、批次状态、图片校验、选择和项目落盘能力；每个供应商只实现自己的生图边界。
 
-当前版本实现 `grok` 供应商：Codex 接管用户明确指定、已经登录的 Chrome Grok 标签页完成生图。下一供应商 `gpt` 已完成架构设计但尚未实现；它代表浏览器里的 ChatGPT Images，与 Codex 内置的 `default` 生图是不同路径。任一时刻仍只启用一个 Generation Provider，不做隐式路由或失败降级。
+当前版本实现 `grok` 与 `gpt` 两条 Web 供应商路径：Codex 接管用户明确指定、已经登录的 Chrome 标签页完成生图。`gpt` 代表浏览器里的 ChatGPT Images，与 Codex 内置的 `default` 生图是不同路径。离线 runtime / identity / download / Skill 路由与发布门已通过；真实浏览器冒烟仍需按 Phase H 逐项授权。任一时刻只启用一个 Generation Provider，不做隐式路由或失败降级。
 
 ## 当前架构
 
@@ -11,7 +11,7 @@ Web ImageGen 是面向 Codex 的供应商中立生图项目。它提供统一的
 ├─ default → 官方 ImageGen Skill → Codex 内置 image_gen（命名待迁移）
 └─ Web ImageGen Skill
    ├─ grok                 → Codex Chrome → 用户指定的 Grok 标签页（已实现）
-   └─ gpt                  → Codex Chrome → 用户指定的 ChatGPT 标签页（已设计）
+   └─ gpt                  → Codex Chrome → 用户指定的 ChatGPT 标签页（离线已发布；真实验证待授权）
        ↓
    共享本地状态/校验/落盘 CLI
 ```
@@ -46,6 +46,12 @@ npm run skill:install
 npm run provider:grok
 ```
 
+切换到 GPT Web 供应商：
+
+```console
+npm run provider:gpt
+```
+
 切回官方 Default Provider（内置 ImageGen）：
 
 ```console
@@ -58,7 +64,7 @@ npm run provider:default
 npm run provider:status
 ```
 
-切换后重启 Codex。切换命令只管理 Web ImageGen 自己的配置块与 `<CODEX_ROOT>/web-imagegen/provider.json`；遇到同一路径的外部配置冲突或不一致状态时停止，不覆盖用户配置。公开 CLI 暂不提供 `provider:gpt`（返回 `provider-not-ready`），待 GPT runtime 与 Skill 路由完成后再开放。
+切换后重启 Codex。切换命令只管理 Web ImageGen 自己的配置块与 `<CODEX_ROOT>/web-imagegen/provider.json`；遇到同一路径的外部配置冲突或不一致状态时停止，不覆盖用户配置。`provider:default`、`provider:grok` 与 `provider:gpt` 均可在隔离/`--codex-root` 或用户显式切换时运行；旧命令 `provider:openai` 已退役。
 
 ## 当前 Grok 工作流
 
@@ -112,7 +118,7 @@ GPT Web Provider Integration 的文档：
 - [测试与验证方案](./docs/gpt-provider-test-plan.md)
 - [单步实施任务](./docs/gpt-provider-tasks.md)
 
-`provider:default` 与 `provider:grok` 已可在隔离/`--codex-root` 环境下运行；公开 `provider:gpt` 仍未发布。
+`provider:default`、`provider:grok` 与 `provider:gpt` 已可在隔离/`--codex-root` 环境下运行。真实 ChatGPT 标签页冒烟仍属 Phase H，需单独授权提交次数。
 
 ## 测试
 

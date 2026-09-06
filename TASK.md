@@ -142,5 +142,9 @@ S9 不属于默认实现门禁；未授权时以离线验证完成交付。
   - [x] GPT-034 Grok 页面/Post/×2/下载规则迁入 `references/providers/grok.md`
   - [x] GPT-035 GPT 空白对话/锚点/提交/绑定/物化写入 `references/providers/gpt.md`
   - [x] GPT-036 顶层 Skill 先 status，再只加载一个 provider 与一个 workflow 文档（SK-01～03）
-- [ ] Phase G（GPT-037～040）：离线总验收与 GPT 命令发布门。
+- [x] Phase G（GPT-037～040）：离线总验收与 GPT 命令发布门。
+  - [x] GPT-037 全量 `npm test` 两次一致（85/85，无 skipped/todo）
+  - [x] GPT-038 临时 Codex 根 install / 三值 dry-run / 三值切换 / status；真实配置 mtime 未变
+  - [x] GPT-039 README/DESIGN/BREAKPOINT 同步；禁用项审计；`git diff --check`；Skill `quick_validate.py`
+  - [x] GPT-040 解除 `provider-not-ready`，公开 `provider:gpt`（CLI-03）
 - [ ] Phase H（GPT-041～046）：逐项授权的真实浏览器验证与收尾。
