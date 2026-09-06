@@ -1,0 +1,41 @@
+# Repo-local pointer for Multica agents (plan §35).
+# Facts only — verified against committed README/tree at the revision below.
+# Project-wide memory lives in the Project Context path, not in this product repo.
+
+project_id: 19a54e43-57eb-4823-8bd2-4e026addcea7
+project_name: Web-ImageGen
+repo_id: web-imagegen
+
+repo_role:
+  - codex-web-imagegen-skill
+  - provider-neutral-image-generation
+
+project_context:
+  # V1 uses one shared memory repo (independent per-project context repo is P1).
+  repo: multica-memory
+  local_path: D:\AI\multica-memory
+  memory_chain: web-imagegen-pilot
+
+memory_scope:
+  - web-imagegen
+
+key_domains:
+  - generation-provider
+  - provider-switch
+  - grok-chrome-boundary
+  - workflow-mode
+  - candidate-validation
+  - job-state
+  - artifact-layout
+
+verified_against:
+  git_revision: 72db245a9d53886dfb4a6bc52fbc4a2179e237ec
+  sources:
+    - README.md
+    - DESIGN.md
+    - package.json
+    - docs/adr/0001-use-codex-chrome-as-the-only-browser-boundary.md
+    - docs/adr/0002-switch-image-generation-providers-globally.md
+    - D:\AI\multica-memory\memory\web-imagegen-repo-map.json
+    - D:\AI\multica-memory\memory\web-imagegen-project-context.json
+    - D:\AI\multica-memory\registry\projects.yaml
