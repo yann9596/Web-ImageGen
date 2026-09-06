@@ -28,6 +28,17 @@ test("runtime has one local backend and no retired browser stack", () => {
   assert.doesNotMatch(code, /\bfetch\s*\(|https?\.request\s*\(/i)
 })
 
+test("select and runtime stay free of provider URL recognition", () => {
+  const select = readFileSync(join(ROOT, "src", "select.mjs"), "utf8")
+  assert.doesNotMatch(select, /grok\.com/)
+  assert.doesNotMatch(select, /\/imagine\/post\//)
+  assert.doesNotMatch(select, /chatgpt\.com/)
+  const runtime = readFileSync(join(ROOT, "src", "runtime.mjs"), "utf8")
+  assert.doesNotMatch(runtime, /grok\.com/)
+  assert.doesNotMatch(runtime, /chatgpt\.com/)
+  assert.doesNotMatch(runtime, /\/imagine\/post\//)
+})
+
 test("Web ImageGen Skill exposes the current Grok/Chrome provider", () => {
   const skillDir = join(ROOT, "skill", "web-imagegen")
   const skill = readFileSync(join(skillDir, "SKILL.md"), "utf8")

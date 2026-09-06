@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto"
 import { WEB_PROVIDERS } from "./provider-config.mjs"
+import { validateGrokIdentity } from "./providers/grok-identity.mjs"
+import { validateGptIdentity } from "./providers/gpt-identity.mjs"
 
 export const ATTEMPT_PURPOSES = Object.freeze(["initial", "fill", "recovery"])
 export const ATTEMPT_STATES = Object.freeze(["prepared", "bound", "collected", "failed"])
@@ -99,6 +101,18 @@ function sameResponse(existing, observation) {
     String(existing.userTurnKey || "") === String(observation.userTurnKey || "") &&
     String(existing.responseKey || "") === String(observation.responseKey || "")
   )
+}
+
+export function validateAttemptIdentity(provider, observation, attempt = null) {
+  const expected = attempt?.browserContext || {}
+  const beforeKeys = observation?.beforeKeys
+  if (provider === "grok") {
+    return validateGrokIdentity({ observation, expected, beforeKeys })
+  }
+  if (provider === "gpt") {
+    return validateGptIdentity({ observation, expected, beforeKeys })
+  }
+  return { ok: false, error: "invalid-provider", validator: null }
 }
 
 function realAttempts(job) {
@@ -285,12 +299,19 @@ export function bindAttempt(job, input = {}) {
 
   const observation = input.observation || input.identity || null
   if (!observation || typeof observation !== "object") return failure("invalid-request")
-  if (!observation.responseKey || !Array.isArray(observation.assetKeys)) return failure("invalid-request")
+
+  const identity = validateAttemptIdentity(provider, observation, attempt)
+  if (!identity.ok) {
+    return failure(identity.error || "invalid-request", {
+      validator: identity.validator || null,
+      attemptId,
+    })
+  }
 
   const boundResponse = {
-    userTurnKey: observation.userTurnKey == null ? null : String(observation.userTurnKey),
-    responseKey: String(observation.responseKey),
-    assetKeys: observation.assetKeys.map(String),
+    userTurnKey: identity.userTurnKey == null ? null : String(identity.userTurnKey),
+    responseKey: String(identity.responseKey),
+    assetKeys: identity.assetKeys.map(String),
   }
 
   if (attempt.status === "bound") {
@@ -300,10 +321,11 @@ export function bindAttempt(job, input = {}) {
         idempotent: true,
         attempt,
         job,
+        validator: identity.validator || null,
         ...remainingAttemptBudget(job, attempt.purpose),
       }
     }
-    return failure("response-ambiguous", { attemptId })
+    return failure("response-ambiguous", { attemptId, validator: identity.validator || null })
   }
 
   const nextAttempt = {
@@ -319,6 +341,7 @@ export function bindAttempt(job, input = {}) {
     idempotent: false,
     attempt: nextAttempt,
     job: next,
+    validator: identity.validator || null,
     ...remainingAttemptBudget(next, attempt.purpose),
   }
 }

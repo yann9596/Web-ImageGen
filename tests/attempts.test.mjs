@@ -99,6 +99,7 @@ test("AT-03 bind is idempotent for same response and ambiguous for a different o
   })
   assert.equal(bound.ok, true)
   assert.equal(bound.attempt.status, "bound")
+  assert.equal(bound.validator, "gpt-identity")
   job = bound.job
 
   const replay = bindAttempt(job, {
@@ -108,6 +109,7 @@ test("AT-03 bind is idempotent for same response and ambiguous for a different o
   })
   assert.equal(replay.ok, true)
   assert.equal(replay.idempotent, true)
+  assert.equal(replay.validator, "gpt-identity")
   assert.deepEqual(replay.attempt.response, bound.attempt.response)
 
   const ambiguous = bindAttempt(job, {
@@ -117,7 +119,96 @@ test("AT-03 bind is idempotent for same response and ambiguous for a different o
   })
   assert.equal(ambiguous.ok, false)
   assert.equal(ambiguous.error, "response-ambiguous")
+  assert.equal(ambiguous.validator, "gpt-identity")
   assert.equal(job.attempts[0].response.responseKey, "resp-1")
+})
+
+test("GPT-021 same observation fails under the wrong provider validator", () => {
+  const gptObservation = {
+    origin: "https://chatgpt.com",
+    conversationKey: "conv-1",
+    userTurnKey: "turn-1",
+    responseKey: "resp-1",
+    assetKeys: ["gpt:resp-1:0"],
+  }
+  const grokObservation = {
+    origin: "https://grok.com",
+    pageUrl: "https://grok.com/imagine/post/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    mainSrc: "https://assets.grok.com/users/u/generated/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee-part-0/image.jpg",
+    mainLoaded: true,
+    candidateKeys: ["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"],
+  }
+
+  let gptJob = baseJob()
+  const gptStarted = startAttempt(gptJob, {
+    provider: "gpt",
+    purpose: "initial",
+    prompt: gptJob.prompt,
+    browserContext,
+  })
+  gptJob = gptStarted.job
+  const gptOk = bindAttempt(gptJob, {
+    provider: "gpt",
+    attemptId: gptStarted.attempt.attemptId,
+    observation: gptObservation,
+  })
+  assert.equal(gptOk.ok, true)
+  assert.equal(gptOk.validator, "gpt-identity")
+
+  const gptAsGrok = bindAttempt(
+    {
+      ...gptJob,
+      provider: "grok",
+      attempts: gptStarted.job.attempts,
+      activeAttemptId: gptStarted.attempt.attemptId,
+    },
+    {
+      provider: "grok",
+      attemptId: gptStarted.attempt.attemptId,
+      observation: gptObservation,
+    },
+  )
+  assert.equal(gptAsGrok.ok, false)
+  assert.equal(gptAsGrok.error, "wrong-provider-page")
+  assert.equal(gptAsGrok.validator, "grok-identity")
+
+  let grokJob = baseJob({ provider: "grok", requestedCount: 2 })
+  const grokStarted = startAttempt(grokJob, {
+    provider: "grok",
+    purpose: "initial",
+    prompt: grokJob.prompt,
+    browserContext: {
+      origin: "https://grok.com",
+      conversationKey: "grok-session",
+      beforeResponseAnchor: "",
+    },
+  })
+  assert.equal(grokStarted.ok, true)
+  grokJob = grokStarted.job
+  const grokOk = bindAttempt(grokJob, {
+    provider: "grok",
+    attemptId: grokStarted.attempt.attemptId,
+    observation: grokObservation,
+  })
+  assert.equal(grokOk.ok, true)
+  assert.equal(grokOk.validator, "grok-identity")
+
+  const grokAsGpt = bindAttempt(
+    {
+      ...grokJob,
+      provider: "gpt",
+      attempts: grokStarted.job.attempts,
+      activeAttemptId: grokStarted.attempt.attemptId,
+    },
+    {
+      provider: "gpt",
+      attemptId: grokStarted.attempt.attemptId,
+      observation: grokObservation,
+    },
+  )
+  assert.equal(grokAsGpt.ok, false)
+  assert.equal(grokAsGpt.error, "wrong-provider-page")
+  assert.equal(grokAsGpt.validator, "gpt-identity")
 })
 
 test("AT-04 budget rejects third GPT AI base attempt and one-shot recovery only after hard failure", () => {
@@ -288,6 +379,8 @@ test("AT-06 crash recovery returns a unique nextAction after memory clear", () =
     provider: "gpt",
     attemptId: preparedReload.activeAttemptId,
     observation: {
+      origin: "https://chatgpt.com",
+      conversationKey: "conv-1",
       userTurnKey: "u1",
       responseKey: "r1",
       assetKeys: ["gpt:r1:0"],

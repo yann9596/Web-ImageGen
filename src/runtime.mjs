@@ -20,7 +20,8 @@ import {
   transition,
   writeBatch,
 } from "./jobs.mjs"
-import { candidateIdentityKeys, gateGroupChoose, replayChoose } from "./select.mjs"
+import { candidateIdentityKeys } from "./providers/grok-identity.mjs"
+import { gateGroupChoose, replayChoose } from "./select.mjs"
 import { createJobDir, ensureSessionDir, extFor, nextOut } from "./paths.mjs"
 
 export class RuntimeError extends Error {
