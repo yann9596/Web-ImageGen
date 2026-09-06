@@ -64,7 +64,24 @@ export const ERRORS = Object.freeze([
   "download-missing",
   "download-ambiguous",
   "runtime-failed",
+  "invalid-provider",
+  "provider-not-ready",
+  "provider-config-mismatch",
+  "provider-mismatch",
+  "attempt-pending",
+  "attempt-not-ready",
+  "attempt-budget-exhausted",
+  "submission-ambiguous",
+  "wrong-provider-page",
+  "conversation-not-isolated",
+  "conversation-changed",
+  "response-ambiguous",
+  "asset-identity-missing",
+  "reference-ambiguous",
+  "generation-refused",
 ])
+
+export const JOB_PROVIDERS = Object.freeze(["grok", "gpt"])
 
 const QUALITY_HIGH_RE = /质量档|质量模式|高质量模式|(改用|切换|使用|用)质量|quality\s*mode/i
 
@@ -123,9 +140,11 @@ export function validateInit(input = {}) {
   const workspace = String(input.workspace || "").trim()
   const prompt = String(input.prompt || "").trim()
   const workflow = String(input.workflow || "").trim()
+  const provider = input.provider == null ? "" : String(input.provider).trim()
   if (!workspace) return failure("workspace-required")
   if (!prompt) return failure("prompt-required")
   if (!WORKFLOWS.includes(workflow)) return failure("workflow-required")
+  if (!JOB_PROVIDERS.includes(provider)) return failure("invalid-provider")
 
   let selection = input.selection || null
   let requestedCount
@@ -152,6 +171,7 @@ export function validateInit(input = {}) {
     ok: true,
     value: {
       workspace,
+      provider,
       prompt,
       originalPrompt: input.originalPrompt ? String(input.originalPrompt) : null,
       workflow,
@@ -165,6 +185,13 @@ export function validateInit(input = {}) {
       clickAspect: workflow === "ai" ? aspectClickTarget(aspect) : null,
     },
   }
+}
+
+export function assertProviderMatch(job, provider) {
+  const value = provider == null ? "" : String(provider).trim()
+  if (!JOB_PROVIDERS.includes(value)) return failure("invalid-provider")
+  if (!job?.provider || job.provider !== value) return failure("provider-mismatch")
+  return { ok: true }
 }
 
 export function validateChoose(input = {}) {

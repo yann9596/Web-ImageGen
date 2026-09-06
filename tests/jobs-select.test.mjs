@@ -12,7 +12,7 @@ test("state transitions and disk recovery remain deterministic", () => {
   const jobDir = join(sessionDir, "job")
   mkdirSync(jobDir, { recursive: true })
   clearJobMemory()
-  let job = writeBatch(createBatch({ workspace, sessionID: "task", sessionDir, jobDir, workflow: "user", state: "generating" }))
+  let job = writeBatch(createBatch({ workspace, sessionID: "task", sessionDir, jobDir, workflow: "user", provider: "grok", state: "generating" }))
   assert.equal(canTransition("generating", "candidates-ready"), true)
   job = transition(job, "candidates-ready", { candidates: [{ id: "1", path: "one.jpg" }] })
   clearJobMemory()

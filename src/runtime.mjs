@@ -10,7 +10,8 @@ import { basename, isAbsolute, join, relative, resolve } from "node:path"
 import { randomBytes } from "node:crypto"
 import { assertSourceFile, writeChosenFile } from "./artifact.mjs"
 import { acceptCandidate, extMatchesType } from "./candidates.mjs"
-import { validateChoose, validateInit } from "./contract.mjs"
+import { debugAttempts } from "./attempts.mjs"
+import { assertProviderMatch, validateChoose, validateInit } from "./contract.mjs"
 import {
   createBatch,
   lastJob,
@@ -92,6 +93,7 @@ function safeJob(job) {
   if (!job) return null
   return {
     batchKey: job.batchKey,
+    provider: job.provider || null,
     sessionID: job.sessionID,
     jobDir: job.jobDir,
     workflow: job.workflow,
@@ -103,6 +105,8 @@ function safeJob(job) {
     recoveryRetryCount: job.recoveryRetryCount,
     refinementBudget: job.refinementBudget,
     refinementUsed: job.refinementUsed,
+    activeAttemptId: job.activeAttemptId || null,
+    attemptCount: Array.isArray(job.attempts) ? job.attempts.length : 0,
     candidates: (job.candidates || []).map(({ id, path, key, contentKey: hash, type, width, height }) => ({
       id,
       path,
@@ -117,6 +121,13 @@ function safeJob(job) {
     saved: job.saved || [],
     lastError: job.lastError || null,
   }
+}
+
+function requireProvider(job, provider) {
+  if (provider == null || provider === "") return job
+  const checked = assertProviderMatch(job, provider)
+  if (!checked.ok) fail(checked.error)
+  return job
 }
 
 async function validateReferences(paths) {
@@ -394,6 +405,9 @@ export function redrawJob(jobDir, { refine = false, reason = null, prompt = null
       lastChooseResult: null,
       artifact: null,
       lastError: null,
+      attempts: [],
+      activeAttemptId: null,
+      migrationUnprovable: false,
     }))
     next = transition(next, "generating")
     return { status: "generating", redraw: true, refine, ...safeJob(next), prompt: next.prompt, quality: next.quality, aspect: next.aspect }
@@ -423,18 +437,22 @@ export function cancelJob(jobDir) {
   })
 }
 
-export function statusJob({ jobDir, workspace, sessionID } = {}) {
+export function statusJob({ jobDir, workspace, sessionID, provider } = {}) {
   const job = jobDir ? requireJob(jobDir) : sessionID ? lastJob(sessionID, { workspace }) : latestJob(workspace)
   if (!job) fail("no-job")
+  requireProvider(job, provider)
   return { status: "ok", ...safeJob(job) }
 }
 
-export function debugJob(jobDir) {
+export function debugJob(jobDir, { provider } = {}) {
   const job = requireJob(jobDir)
+  requireProvider(job, provider)
+  const attemptDebug = debugAttempts(job)
   return {
     status: "ok",
     debug: {
       batchKey: job.batchKey,
+      provider: job.provider || null,
       state: job.state,
       workflow: job.workflow,
       selection: job.selectionMode,
@@ -444,6 +462,10 @@ export function debugJob(jobDir) {
       recoveryRetryCount: job.recoveryRetryCount,
       refinementUsed: job.refinementUsed,
       lastError: job.lastError || null,
+      migrationUnprovable: attemptDebug.migrationUnprovable,
+      attempts: attemptDebug.attempts,
+      baseRemaining: attemptDebug.baseRemaining,
+      recoveryRemaining: attemptDebug.recoveryRemaining,
       candidates: (job.candidates || []).map(({ id, type, width, height }) => ({ id, type, width, height })),
     },
   }

@@ -8,7 +8,7 @@
     "provider:default": "node scripts/skill-provider.mjs default",
     "provider:grok": "node scripts/skill-provider.mjs grok",
     "provider:status": "node scripts/skill-provider.mjs status",
-    "test": "node --test tests/architecture.test.mjs tests/artifact.test.mjs tests/atomic-file.test.mjs tests/browser-downloads.test.mjs tests/contract.test.mjs tests/jobs-select.test.mjs tests/paths.test.mjs tests/provider-config.test.mjs tests/provider-switch.test.mjs tests/runtime.test.mjs"
+    "test": "node --test tests/architecture.test.mjs tests/artifact.test.mjs tests/atomic-file.test.mjs tests/attempts.test.mjs tests/browser-downloads.test.mjs tests/contract.test.mjs tests/job-migration.test.mjs tests/jobs-select.test.mjs tests/paths.test.mjs tests/provider-config.test.mjs tests/provider-switch.test.mjs tests/runtime.test.mjs"
   },
   "dependencies": {
     "sharp": "^0.35.4"

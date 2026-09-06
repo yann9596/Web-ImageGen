@@ -16,7 +16,7 @@ test("AI flow retries once, merges unique originals, chooses one, and replays id
   const downloads = join(workspace, "downloads")
   const first = await imageFile(downloads, "first.png", { color: "red" })
   const second = await imageFile(downloads, "second.png", { color: "blue" })
-  const request = writeJson(requestPath(workspace), { workspace, prompt: "wide banner", workflow: "ai", sessionID: "task-ai", goal: "banner" })
+  const request = writeJson(requestPath(workspace), { workspace, provider: "grok", prompt: "wide banner", workflow: "ai", sessionID: "task-ai", goal: "banner" })
   const initialized = await initFromRequest(request)
   assert.equal(initialized.status, "generating")
   assert.equal(existsSync(request), false)
@@ -47,7 +47,7 @@ test("AI flow retries once, merges unique originals, chooses one, and replays id
 test("user group accepts an incomplete set and can save all", async () => {
   const workspace = mkdtempSync(join(tmpdir(), "web-imagegen-runtime-"))
   const one = await imageFile(join(workspace, "downloads"), "one.webp", { format: "webp", color: "green" })
-  const request = writeJson(requestPath(workspace), { workspace, prompt: "不要修改", workflow: "user", selection: "group", count: 3, sessionID: "task-group", goal: "cards" })
+  const request = writeJson(requestPath(workspace), { workspace, provider: "grok", prompt: "不要修改", workflow: "user", selection: "group", count: 3, sessionID: "task-group", goal: "cards" })
   const initialized = await initFromRequest(request)
   const manifest = writeJson(join(workspace, ".web-imagegen", "group.json"), { batchKey: initialized.batchKey, files: [{ path: one, key: "group-one" }] })
   const ready = await collectJob(initialized.jobDir, manifest)
@@ -61,7 +61,7 @@ test("user group accepts an incomplete set and can save all", async () => {
 test("user single freezes batch identities before accepting the selected original", async () => {
   const workspace = mkdtempSync(join(tmpdir(), "web-imagegen-runtime-"))
   const selected = await imageFile(join(workspace, "downloads"), "selected.jpg", { format: "jpeg", color: "purple" })
-  const request = writeJson(requestPath(workspace), { workspace, prompt: "原样", workflow: "user", selection: "single", sessionID: "task-single", goal: "cover" })
+  const request = writeJson(requestPath(workspace), { workspace, provider: "grok", prompt: "原样", workflow: "user", selection: "single", sessionID: "task-single", goal: "cover" })
   const initialized = await initFromRequest(request)
   const key = "https://assets.grok.com/users/u/generated/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee-part-0/image.jpg"
   const manifest = writeJson(join(workspace, ".web-imagegen", "single.json"), { batchKey: initialized.batchKey, candidates: [{ key, responseId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" }] })
@@ -76,7 +76,7 @@ test("refine redraw is budgeted and creates a versioned job", async () => {
   const workspace = mkdtempSync(join(tmpdir(), "web-imagegen-runtime-"))
   const a = await imageFile(join(workspace, "downloads"), "a.png", { color: "black" })
   const b = await imageFile(join(workspace, "downloads"), "b.png", { color: "white" })
-  const request = writeJson(requestPath(workspace), { workspace, prompt: "poster", workflow: "ai", refine: 1, sessionID: "task-refine", goal: "poster" })
+  const request = writeJson(requestPath(workspace), { workspace, provider: "grok", prompt: "poster", workflow: "ai", refine: 1, sessionID: "task-refine", goal: "poster" })
   const initialized = await initFromRequest(request)
   const manifest = writeJson(join(workspace, ".web-imagegen", "refine.json"), { batchKey: initialized.batchKey, files: [{ path: a, key: "a" }, { path: b, key: "b" }] })
   await collectJob(initialized.jobDir, manifest)
@@ -90,7 +90,7 @@ test("refine redraw is budgeted and creates a versioned job", async () => {
 
 test("an existing job lock returns busy", async () => {
   const workspace = mkdtempSync(join(tmpdir(), "web-imagegen-runtime-"))
-  const request = writeJson(requestPath(workspace), { workspace, prompt: "cat", workflow: "ai", sessionID: "task-lock", goal: "cat" })
+  const request = writeJson(requestPath(workspace), { workspace, provider: "grok", prompt: "cat", workflow: "ai", sessionID: "task-lock", goal: "cat" })
   const initialized = await initFromRequest(request)
   writeFileSync(join(initialized.jobDir, ".runtime.lock"), "held")
   const manifest = writeJson(join(workspace, ".web-imagegen", "locked.json"), { batchKey: initialized.batchKey, files: [] })
@@ -101,7 +101,7 @@ test("candidate collection rejects previews and extension mismatches", async () 
   const workspace = mkdtempSync(join(tmpdir(), "web-imagegen-runtime-"))
   const preview = await imageFile(join(workspace, "downloads"), "preview.png", { width: 64, height: 64 })
   const wrongExtension = await imageFile(join(workspace, "downloads"), "not-really-jpeg.jpg", { width: 640, height: 512 })
-  const request = writeJson(requestPath(workspace), { workspace, prompt: "set", workflow: "user", selection: "group", count: 2, sessionID: "task-invalid", goal: "set" })
+  const request = writeJson(requestPath(workspace), { workspace, provider: "grok", prompt: "set", workflow: "user", selection: "group", count: 2, sessionID: "task-invalid", goal: "set" })
   const initialized = await initFromRequest(request)
   const manifest = writeJson(join(workspace, ".web-imagegen", "invalid.json"), { batchKey: initialized.batchKey, files: [preview, wrongExtension] })
   await assert.rejects(
@@ -112,7 +112,7 @@ test("candidate collection rejects previews and extension mismatches", async () 
 
 test("a lost Chrome batch identity becomes selection-expired", async () => {
   const workspace = mkdtempSync(join(tmpdir(), "web-imagegen-runtime-"))
-  const request = writeJson(requestPath(workspace), { workspace, prompt: "single", workflow: "user", selection: "single", sessionID: "task-expire", goal: "single" })
+  const request = writeJson(requestPath(workspace), { workspace, provider: "grok", prompt: "single", workflow: "user", selection: "single", sessionID: "task-expire", goal: "single" })
   const initialized = await initFromRequest(request)
   const expired = expireJob(initialized.jobDir, { reason: "tab-closed" })
   assert.equal(expired.state, "selection-expired")

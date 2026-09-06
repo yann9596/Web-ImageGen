@@ -13,8 +13,12 @@ import {
 
 test("AI workflow is explicit and always requests two candidates", () => {
   assert.equal(validateInit({ workspace: "D:/work", prompt: "cat" }).error, "workflow-required")
-  const result = validateInit({ workspace: "D:/work", prompt: "16:9 banner", workflow: "ai", count: 8 })
+  assert.equal(validateInit({ workspace: "D:/work", prompt: "cat", workflow: "ai" }).error, "invalid-provider")
+  assert.equal(validateInit({ workspace: "D:/work", prompt: "cat", workflow: "ai", provider: "default" }).error, "invalid-provider")
+  assert.equal(validateInit({ workspace: "D:/work", prompt: "cat", workflow: "ai", provider: "openai" }).error, "invalid-provider")
+  const result = validateInit({ workspace: "D:/work", prompt: "16:9 banner", workflow: "ai", provider: "grok", count: 8 })
   assert.equal(result.ok, true)
+  assert.equal(result.value.provider, "grok")
   assert.equal(result.value.selection, "single")
   assert.equal(result.value.requestedCount, 2)
   assert.equal(result.value.aspect, "16:9")
@@ -22,8 +26,18 @@ test("AI workflow is explicit and always requests two candidates", () => {
 })
 
 test("user workflow requires selection and never controls quality or aspect", () => {
-  assert.equal(validateInit({ workspace: "D:/work", prompt: "cat", workflow: "user" }).error, "selection-required")
-  const result = validateInit({ workspace: "D:/work", prompt: "原样提示", workflow: "user", selection: "group", count: 4, quality: "high", aspect: "1:1" })
+  assert.equal(validateInit({ workspace: "D:/work", prompt: "cat", workflow: "user", provider: "grok" }).error, "selection-required")
+  const result = validateInit({
+    workspace: "D:/work",
+    prompt: "原样提示",
+    workflow: "user",
+    provider: "gpt",
+    selection: "group",
+    count: 4,
+    quality: "high",
+    aspect: "1:1",
+  })
+  assert.equal(result.value.provider, "gpt")
   assert.equal(result.value.prompt, "原样提示")
   assert.equal(result.value.requestedCount, 4)
   assert.equal(result.value.quality, "auto")
