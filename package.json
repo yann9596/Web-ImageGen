@@ -5,10 +5,11 @@
   "scripts": {
     "imagegen": "node scripts/web-imagegen.mjs",
     "skill:install": "node scripts/skill-provider.mjs install",
+    "provider:default": "node scripts/skill-provider.mjs default",
     "provider:grok": "node scripts/skill-provider.mjs grok",
-    "provider:openai": "node scripts/skill-provider.mjs openai",
+    "provider:gpt": "node scripts/skill-provider.mjs gpt",
     "provider:status": "node scripts/skill-provider.mjs status",
-    "test": "node --test tests/architecture.test.mjs tests/artifact.test.mjs tests/browser-downloads.test.mjs tests/contract.test.mjs tests/jobs-select.test.mjs tests/paths.test.mjs tests/provider-switch.test.mjs tests/runtime.test.mjs"
+    "test": "node --test tests/architecture.test.mjs tests/artifact.test.mjs tests/atomic-file.test.mjs tests/attempts.test.mjs tests/cli.test.mjs tests/contract.test.mjs tests/download-snapshot.test.mjs tests/gpt-download.test.mjs tests/gpt-identity.test.mjs tests/grok-download.test.mjs tests/grok-identity.test.mjs tests/job-migration.test.mjs tests/jobs-select.test.mjs tests/paths.test.mjs tests/provider-config.test.mjs tests/provider-switch.test.mjs tests/runtime-gpt.test.mjs tests/runtime.test.mjs tests/skill-routing.test.mjs"
   },
   "dependencies": {
     "sharp": "^0.35.4"

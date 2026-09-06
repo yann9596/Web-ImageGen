@@ -2,15 +2,15 @@
 
 ## 1. 目标
 
-Web ImageGen 是供应商中立的 Codex 生图项目，统一提供全局安装、供应商切换、状态机、候选校验和文件落盘能力。当前版本只实现 `grok` Provider Integration：当 Grok 被选为全局 Generation Provider 时，Web ImageGen Skill 使用 Codex 自带的 Chrome 能力接管用户明确指定、已登录的 Grok 标签页。
+Web ImageGen 是供应商中立的 Codex 生图项目，统一提供全局安装、供应商切换、状态机、候选校验和文件落盘能力。当前版本已实现 `grok` 与 `gpt` 两条 Web Provider Integration（离线路径与公开切换命令）；`gpt` 通过用户明确指定、已登录的 ChatGPT 网页标签页完成生图，与 Codex 内置的 `default` 生图能力是两条不同的 Generation Provider 路径。真实浏览器冒烟仍需按 Phase H 逐项授权。
 
 系统必须保持轻量和单路径：无 MCP、无 Playwright/CDP、无自管浏览器/profile、无 HTTP daemon、无第二浏览器后端、失败不降级。
 
 ## 2. 非目标
 
-- 不调用 xAI/Grok API，也不管理 API key。
+- 不调用 xAI/Grok API 或 OpenAI API，也不管理 API key。
 - 不兼容 OpenCode，不保留 OpenCode 工具协议。
-- 不实现 ChatGPT 网页生图 provider。
+- 不把 GPT 网页供应商与 Codex 内置生图合并成同一个 provider 值。
 - 不搜索或自动创建 Grok 标签页。
 - 不从用户提示词推断全局提供方或 Workflow Mode。
 - 不移植官方 ImageGen Skill 的 `generate/edit` 分类、通用提示词优化器或逐项语义校验门。
@@ -20,26 +20,36 @@ Web ImageGen 是供应商中立的 Codex 生图项目，统一提供全局安装
 
 ### 3.1 全局 Generation Provider
 
-全局开关只有两个值：
+全局开关为三个值；`default` 的命名迁移尚未实施：
 
-| 值 | 启用 | 禁用 | 唯一底层能力 |
-|---|---|---|---|
-| `openai` | 官方 ImageGen Skill | Web ImageGen Skill | 内置 `image_gen` |
-| `grok` | Web ImageGen Skill（Grok Integration） | 官方 ImageGen Skill | Codex Chrome |
+| 值 | 状态 | 启用 | 禁用 | 唯一底层能力 |
+|---|---|---|---|---|
+| `default` | 能力已实现，命名待迁移 | 官方 ImageGen Skill | Web ImageGen Skill | Codex 内置 `image_gen` |
+| `grok` | 已实现（含真实验证） | Web ImageGen Skill（Grok Integration） | 官方 ImageGen Skill | Codex Chrome + 用户指定的 Grok 标签页 |
+| `gpt` | 离线已发布；真实验证待授权 | Web ImageGen Skill（GPT Web Integration） | 官方 ImageGen Skill | Codex Chrome + 用户指定的 ChatGPT 标签页 |
 
-切换由用户显式运行命令完成。命令更新 Codex 的 Skill 启用配置后要求重启 Codex。任何时刻只能有一个 ImageGen Skill 生效；不在请求过程中按提示词路由或 fallback。后续供应商通过新的显式 Provider Integration 和 provider 值加入，不改变 `Web ImageGen` 的项目名称。
+切换由用户显式运行命令完成。命令更新 Codex 的 Skill 启用配置和 Web ImageGen 自己的非敏感 provider 状态后要求重启 Codex。任何时刻只能有一个 ImageGen Skill 和一个 Provider Integration 生效；不在请求过程中按提示词路由或 fallback。后续供应商通过新的显式 Provider Integration 和 provider 值加入，不改变 `Web ImageGen` 的项目名称。
+
+provider 值按用户心智命名：`default` 始终表示 Codex 默认内置生图，`gpt` 始终表示 GPT 网页生图。内部文档使用展示名 Default Provider 与 GPT Web Provider Integration，以免把产品边界写成具体模型版本。
 
 ### 3.2 Workflow Mode
 
 Web ImageGen Skill 内部另有 `workflow=ai|user`。首次未设置时询问一次，并在当前 Codex 任务内保持，直到用户切换。它只决定提示词归属、供应商界面控制和选图责任，不改变全局 Generation Provider。
+
+### 3.3 GPT Web Provider
+
+GPT Web Integration 的总体设计见 [docs/gpt-provider-design.md](./docs/gpt-provider-design.md)，代码边界见 [docs/gpt-provider-implementation-design.md](./docs/gpt-provider-implementation-design.md)，验证方案见 [docs/gpt-provider-test-plan.md](./docs/gpt-provider-test-plan.md)，单步任务见 [docs/gpt-provider-tasks.md](./docs/gpt-provider-tasks.md)。Phase A～G 已完成离线实现与 `provider:gpt` 发布门；Phase H 真实验证仍要求用户明确授权提交次数，默认不修改真实 Codex 配置、不提交真实 GPT 网页生图任务。
 
 ## 4. 组件与依赖方向
 
 ```text
 Codex task
   └─ Web ImageGen Skill
-       ├─ Grok Provider Integration       当前供应商编排
-       │    └─ Codex Chrome skill/runtime 浏览器读取与动作
+       ├─ Provider Router                 读取显式全局 provider
+       ├─ Grok Provider Integration       已实现
+       │    └─ Codex Chrome skill/runtime → 用户指定的 Grok 标签页
+       ├─ GPT Web Provider Integration    离线已发布
+       │    └─ Codex Chrome skill/runtime → 用户指定的 ChatGPT 标签页
        └─ one-shot local CLI             确定性状态与文件操作
             ├─ contract                  输入、状态、错误
             ├─ jobs                      状态转移、幂等、恢复
@@ -49,7 +59,7 @@ Codex task
             └─ artifact                  真实转码与最终落盘
 ```
 
-浏览器对象不得进入本地状态模块。本地 CLI 只接收普通 JSON、明确的本地文件路径和页面观察结果，因此测试无需浏览器。
+浏览器对象不得进入本地状态模块。本地 CLI 只接收普通 JSON、明确的本地文件路径和页面观察结果，因此测试无需浏览器。每个 job 必须冻结创建时的 provider；全局 provider 后续发生变化时，旧 job 返回 `provider-mismatch`，不得被另一集成接管。
 
 ## 5. Web ImageGen Skill 职责
 
@@ -79,7 +89,7 @@ Web ImageGen Skill 不负责：
 
 - 仅允许在该标签页及其由用户动作产生的 Grok 页面状态中工作。
 - 不枚举历史记录、Cookie、localStorage、密码或 profile。
-- 允许读取当前 Post 主图的媒体引用并在 Chrome 边界内物化为临时本地文件；完整 data URI 不进入日志或任务状态。
+- 允许读取当前供应商对象（Grok Post 或 ChatGPT assistant response）中目标图片的媒体引用，并在 Chrome 边界内物化为临时本地文件；完整 data URI 不进入日志或任务状态。
 - 标签页缺失、关闭、非 Grok、未登录或无法重新证明批次身份时停止。
 - 恢复时重新绑定同一用户提供的标签页；浏览器对象从不落盘。
 - 页面结构无法识别时返回 `ui-changed`，不尝试其他浏览器实现。
@@ -134,6 +144,8 @@ preparing
 - 恢复只恢复磁盘状态，不恢复浏览器对象。
 - 页面与磁盘批次无法相互证明时进入 `selection-expired`。
 
+以下第 10、11 节描述已实现的 Grok 工作流。GPT Web 对应的 attempt 数量与响应身份规则以 [GPT Web Provider Integration 设计](./docs/gpt-provider-design.md)为准。
+
 ## 10. AI 主导工作流
 
 1. 创建批次并进入 `generating`。
@@ -177,7 +189,7 @@ preparing
 - JPEG、PNG、WebP 元数据合法且尺寸有效。
 - 非模糊预览、未物化的浏览器引用、缩略图或历史重复图。
 
-候选保留 Grok 原始格式和字节。最终 `out` 支持 `.jpg/.jpeg/.png/.webp`，使用真实编解码转换；默认 `chosen.jpg`。不得通过改后缀、截图或生成纯色像素满足格式测试。
+候选保留当前供应商原始格式和字节。最终 `out` 支持 `.jpg/.jpeg/.png/.webp`，使用真实编解码转换；默认 `chosen.jpg`。不得通过改后缀、截图或生成纯色像素满足格式测试。
 
 输出目录保持：
 
@@ -202,6 +214,8 @@ CLI 使用单次进程和 JSON 输出，不监听端口。计划命令：
 ## 14. 全局安装和开关
 
 仓库保存 Web ImageGen Skill 源码、供应商指令、安装脚本和切换脚本。安装脚本把 Skill 安装到用户级 Codex Skill 目录；切换脚本只管理带明确 begin/end 标记的 Codex 配置块。
+
+`provider:default`、`provider:grok`、`provider:gpt` 三值切换与托管 provider 状态已可运行；切换只写托管配置块与 `provider.json`，支持 `--dry-run` 与临时 `--codex-root`。
 
 安全规则：
 
@@ -230,7 +244,7 @@ CLI 使用单次进程和 JSON 输出，不监听端口。计划命令：
 - 当前批次候选过滤、文件真实性、尺寸和格式校验。
 - `sharp` 真实转码和内容非空白验证。
 - 单张、组图、重画、取消和 `refine=1` 预算规则。
-- 静态架构检查：不得依赖 Playwright、CDP、Chromium profile、HTTP daemon 或 ChatGPT provider。
+- 静态架构检查：不得依赖 Playwright、CDP、Chromium profile、HTTP daemon、直接供应商 API 或跨 provider fallback。
 
 ### 真实 Chrome 冒烟
 
@@ -240,7 +254,7 @@ CLI 使用单次进程和 JSON 输出，不监听端口。计划命令：
 
 - 文档只描述 Codex 全局 Skill 架构，历史问题文档明确标记为历史。
 - `playwright` 依赖和所有浏览器/profile/daemon 代码删除。
-- OpenCode、ChatGPT provider 和兼容协议删除。
+- 历史 OpenCode、旧 ChatGPT provider 和兼容协议已删除；新的 GPT Web Integration 必须按独立供应商边界重新实现。
 - Web ImageGen Skill 通过官方 Skill 结构校验。
 - 全局安装/切换脚本可在临时配置根完成离线测试。
 - `npm test` 全绿。

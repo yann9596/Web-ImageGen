@@ -10,7 +10,15 @@ import { basename, isAbsolute, join, relative, resolve } from "node:path"
 import { randomBytes } from "node:crypto"
 import { assertSourceFile, writeChosenFile } from "./artifact.mjs"
 import { acceptCandidate, extMatchesType } from "./candidates.mjs"
-import { validateChoose, validateInit } from "./contract.mjs"
+import {
+  bindAttempt,
+  debugAttempts,
+  failAttempt,
+  markAttemptCollected,
+  remainingAttemptBudget,
+  startAttempt,
+} from "./attempts.mjs"
+import { assertProviderMatch, JOB_PROVIDERS, validateChoose, validateInit } from "./contract.mjs"
 import {
   createBatch,
   lastJob,
@@ -19,7 +27,8 @@ import {
   transition,
   writeBatch,
 } from "./jobs.mjs"
-import { candidateIdentityKeys, gateGroupChoose, replayChoose } from "./select.mjs"
+import { candidateIdentityKeys } from "./providers/grok-identity.mjs"
+import { gateGroupChoose, replayChoose } from "./select.mjs"
 import { createJobDir, ensureSessionDir, extFor, nextOut } from "./paths.mjs"
 
 export class RuntimeError extends Error {
@@ -88,10 +97,20 @@ function requireJob(jobDir) {
   return job
 }
 
+function budgetFields(job, purpose = "initial") {
+  const budget = remainingAttemptBudget(job, purpose)
+  return {
+    attemptPolicy: job?.attemptPolicy || null,
+    baseRemaining: budget.baseRemaining,
+    recoveryRemaining: budget.recoveryRemaining,
+  }
+}
+
 function safeJob(job) {
   if (!job) return null
   return {
     batchKey: job.batchKey,
+    provider: job.provider || null,
     sessionID: job.sessionID,
     jobDir: job.jobDir,
     workflow: job.workflow,
@@ -103,7 +122,10 @@ function safeJob(job) {
     recoveryRetryCount: job.recoveryRetryCount,
     refinementBudget: job.refinementBudget,
     refinementUsed: job.refinementUsed,
-    candidates: (job.candidates || []).map(({ id, path, key, contentKey: hash, type, width, height }) => ({
+    activeAttemptId: job.activeAttemptId || null,
+    attemptCount: Array.isArray(job.attempts) ? job.attempts.length : 0,
+    ...budgetFields(job),
+    candidates: (job.candidates || []).map(({
       id,
       path,
       key,
@@ -111,11 +133,53 @@ function safeJob(job) {
       type,
       width,
       height,
+      provider,
+      attemptId,
+      providerAssetKey,
+    }) => ({
+      id,
+      path,
+      key,
+      contentKey: hash,
+      type,
+      width,
+      height,
+      provider: provider || job.provider || null,
+      attemptId: attemptId || null,
+      providerAssetKey: providerAssetKey || key || null,
     })),
     chosenIds: job.chosenIds || [],
     chosenBy: job.chosenBy,
     saved: job.saved || [],
     lastError: job.lastError || null,
+  }
+}
+
+function requireProvider(job, provider, { required = false } = {}) {
+  if (!required && (provider == null || provider === "")) return job
+  const checked = assertProviderMatch(job, provider)
+  if (!checked.ok) fail(checked.error)
+  return job
+}
+
+function requireWorkspaceInput(job, inputPath) {
+  const workspace = job?.workspace
+  if (!workspace) fail("workspace-required")
+  const requestRoot = join(resolve(workspace), ".web-imagegen")
+  if (!isWithin(inputPath, requestRoot)) {
+    fail("invalid-request", "request JSON must be under <workspace>/.web-imagegen")
+  }
+}
+
+function publicAttempt(attempt) {
+  if (!attempt) return null
+  return {
+    attemptId: attempt.attemptId,
+    purpose: attempt.purpose,
+    status: attempt.status,
+    ordinal: attempt.ordinal,
+    assetCount: Array.isArray(attempt.response?.assetKeys) ? attempt.response.assetKeys.length : 0,
+    error: attempt.failure?.error || null,
   }
 }
 
@@ -172,76 +236,221 @@ export async function initFromRequest(requestPath) {
   )
   job = transition(job, "generating")
   unlinkSync(requestPath)
-  return { status: "generating", ...safeJob(job), prompt: job.prompt, quality: job.quality, aspect: job.aspect, clickQuality: value.clickQuality, clickAspect: value.clickAspect }
+  return {
+    status: "generating",
+    ...safeJob(job),
+    prompt: job.prompt,
+    quality: job.quality,
+    aspect: job.aspect,
+    clickQuality: value.clickQuality,
+    clickAspect: value.clickAspect,
+  }
 }
 
-async function inputItems(manifest) {
+export function startAttemptJob(jobDir, inputPath, { provider } = {}) {
+  return withJobLock(jobDir, () => {
+    const job = requireProvider(requireJob(jobDir), provider, { required: true })
+    requireWorkspaceInput(job, inputPath)
+    const input = jsonFile(inputPath)
+    if (input.batchKey && input.batchKey !== job.batchKey) fail("selection-stale", "attempt-start batchKey does not match job")
+    if (job.state !== "generating" && job.state !== "preparing") fail("batch-not-ready", `cannot start attempt from ${job.state}`)
+    const result = startAttempt(job, {
+      provider,
+      purpose: input.purpose,
+      prompt: input.prompt ?? job.prompt,
+      browserContext: input.browserContext,
+    })
+    if (!result.ok) fail(result.error, result.error, { attemptId: result.attemptId || null })
+    writeBatch(result.job)
+    unlinkSync(inputPath)
+    return {
+      status: "ok",
+      idempotent: result.idempotent === true,
+      attempt: publicAttempt(result.attempt),
+      ...budgetFields(result.job, result.attempt.purpose),
+      ...safeJob(result.job),
+    }
+  })
+}
+
+export function bindAttemptJob(jobDir, inputPath, { provider } = {}) {
+  return withJobLock(jobDir, () => {
+    const job = requireProvider(requireJob(jobDir), provider, { required: true })
+    requireWorkspaceInput(job, inputPath)
+    const input = jsonFile(inputPath)
+    if (input.batchKey && input.batchKey !== job.batchKey) fail("selection-stale", "attempt-bind batchKey does not match job")
+    const result = bindAttempt(job, {
+      provider,
+      attemptId: input.attemptId,
+      observation: input.observation || input.identity,
+    })
+    if (!result.ok) fail(result.error, result.error, { attemptId: result.attemptId || input.attemptId || null })
+    writeBatch(result.job)
+    unlinkSync(inputPath)
+    return {
+      status: "ok",
+      idempotent: result.idempotent === true,
+      attempt: publicAttempt(result.attempt),
+      validator: result.validator || null,
+      ...budgetFields(result.job, result.attempt.purpose),
+      ...safeJob(result.job),
+    }
+  })
+}
+
+export function failAttemptJob(jobDir, { provider, attempt, error } = {}) {
+  return withJobLock(jobDir, () => {
+    const job = requireProvider(requireJob(jobDir), provider, { required: true })
+    const result = failAttempt(job, { provider, attemptId: attempt, error })
+    if (!result.ok) fail(result.error, result.error, { attemptId: result.attemptId || attempt || null })
+    writeBatch(result.job)
+    return {
+      status: "ok",
+      idempotent: result.idempotent === true,
+      attempt: publicAttempt(result.attempt),
+      recoveryEligible: result.recoveryEligible === true,
+      fillEligible: result.fillEligible === true,
+      ...budgetFields(result.job, result.attempt.purpose),
+      ...safeJob(result.job),
+    }
+  })
+}
+
+function rejectEntry(pathOrName, error) {
+  const raw = String(pathOrName || "")
+  return { name: basename(raw) || raw || "(unknown)", error: String(error || "invalid-request") }
+}
+
+function requireCollectAttempt(job, manifest) {
+  const provider = String(manifest.provider || "")
+  const attemptId = String(manifest.attemptId || "")
+  if (!JOB_PROVIDERS.includes(provider)) fail("invalid-provider")
+  if (!attemptId) fail("invalid-request", "collect manifest requires attemptId")
+  if (job.provider !== provider) fail("provider-mismatch")
+  const attempt = (job.attempts || []).find((item) => item.attemptId === attemptId)
+  if (!attempt || attempt.status !== "bound") fail("attempt-not-ready")
+  const assetKeys = new Set((attempt.response?.assetKeys || []).map(String))
+  return { provider, attemptId, attempt, assetKeys }
+}
+
+function resolveProviderAssetKey(entry) {
+  if (!entry || typeof entry !== "object") return ""
+  if (entry.providerAssetKey != null && String(entry.providerAssetKey).trim()) return String(entry.providerAssetKey)
+  if (entry.key != null && String(entry.key).trim()) return String(entry.key)
+  return ""
+}
+
+async function inputItems(manifest, { assetKeys }) {
   const raw = Array.isArray(manifest.files) ? manifest.files : []
   return Promise.all(raw.map(async (item) => {
     const entry = typeof item === "string" ? { path: item } : item || {}
     const path = resolve(String(entry.path || ""))
-    if (!entry.path || !existsSync(path)) return { ...entry, path, error: "no-job" }
+    const providerAssetKey = resolveProviderAssetKey(entry)
+    if (!providerAssetKey) return { ...entry, path, providerAssetKey, error: "asset-identity-missing" }
+    if (!assetKeys.has(providerAssetKey)) return { ...entry, path, providerAssetKey, error: "asset-identity-missing" }
+    if (!entry.path || !existsSync(path)) return { ...entry, path, providerAssetKey, error: "no-job" }
     try {
       await assertSourceFile(path, { minLongEdge: 512 })
     } catch (error) {
-      return { ...entry, path, error: error.message }
+      return { ...entry, path, providerAssetKey, error: error.message }
     }
     const buf = readFileSync(path)
-    return { ...entry, path, buf, src: entry.src || entry.url || entry.key || `file:${basename(path)}` }
+    return {
+      ...entry,
+      path,
+      providerAssetKey,
+      key: providerAssetKey,
+      buf,
+      src: entry.src || entry.url || providerAssetKey,
+    }
   }))
 }
 
-function appendCandidates(job, items) {
+function appendCandidates(job, items, { provider, attemptId }) {
   const candidates = [...(job.candidates || [])]
-  const seenKeys = new Set(candidates.map((item) => item.key).filter(Boolean))
+  const seenKeys = new Set(candidates.map((item) => item.key || item.providerAssetKey).filter(Boolean))
   const seenContent = new Set(candidates.map((item) => item.contentKey).filter(Boolean))
   const beforeKeys = new Set(job.beforeKeys || [])
   const rejected = []
   for (const item of items) {
     if (item.error) {
-      rejected.push({ path: item.path, error: item.error })
+      rejected.push(rejectEntry(item.path || item.providerAssetKey, item.error))
       continue
     }
     const accepted = acceptCandidate(item, { beforeKeys, seenKeys, seenContent })
     if (!accepted.ok) {
-      rejected.push({ path: item.path, error: accepted.error })
+      rejected.push(rejectEntry(item.path, accepted.error))
       continue
     }
     if (!extMatchesType(item.path, accepted.type)) {
-      rejected.push({ path: item.path, error: "ext-mismatch" })
+      rejected.push(rejectEntry(item.path, "ext-mismatch"))
       continue
     }
     const id = String(candidates.length + 1)
     const destination = join(job.jobDir, `${id}${extFor(accepted.type)}`)
     copyFileSync(item.path, destination)
+    const providerAssetKey = item.providerAssetKey || accepted.key
     candidates.push({
       id,
       path: destination,
       originalPath: item.path,
-      key: accepted.key,
+      key: providerAssetKey,
+      providerAssetKey,
+      provider,
+      attemptId,
       contentKey: accepted.contentKey,
       type: accepted.type,
       width: accepted.width,
       height: accepted.height,
     })
-    seenKeys.add(accepted.key)
+    seenKeys.add(providerAssetKey)
     seenContent.add(accepted.contentKey)
   }
   return { candidates, rejected }
 }
 
+function finalizeCollectedAttempt(job, attemptId, patch) {
+  const marked = markAttemptCollected(job, attemptId)
+  if (!marked.ok) fail(marked.error || "attempt-not-ready")
+  return transition(marked.job, patch.state, {
+    ...patch,
+    attempts: marked.job.attempts,
+    activeAttemptId: marked.job.activeAttemptId,
+  })
+}
+
+function requestedCandidateCount(job) {
+  return job.workflow === "ai" ? 2 : Number(job.requestedCount) || 0
+}
+
+/**
+ * Grok AI keeps a single initial attempt bound across one in-attempt retry
+ * (page ×2 / recoveryRetryCount). GPT finalizes each attempt and uses fill.
+ */
 export async function collectJob(jobDir, manifestPath) {
   return withJobLockAsync(jobDir, async () => {
     const job = requireJob(jobDir)
     if (job.state !== "generating") fail("batch-not-ready", `cannot collect from ${job.state}`)
     const manifest = jsonFile(manifestPath)
     if (manifest.batchKey !== job.batchKey) fail("selection-stale", "manifest batchKey does not match job")
+    const { provider, attemptId, assetKeys } = requireCollectAttempt(job, manifest)
 
     if (job.workflow === "user" && job.selectionMode === "single") {
       const frozen = manifest.candidates || manifest.keys || []
-      const keys = candidateIdentityKeys(frozen.map((item) => typeof item === "string" ? { key: item } : item))
+      if (!frozen.length) fail("selection-not-ready", "single-selection manifest has no stable candidate identity")
+      const normalized = []
+      for (const item of frozen) {
+        const entry = typeof item === "string" ? { providerAssetKey: item, key: item } : item || {}
+        const providerAssetKey = resolveProviderAssetKey(entry)
+        if (!providerAssetKey || !assetKeys.has(providerAssetKey)) {
+          fail("asset-identity-missing", "single-selection identity is not bound to this attempt")
+        }
+        normalized.push({ ...entry, key: providerAssetKey, providerAssetKey })
+      }
+      const keys = candidateIdentityKeys(normalized)
       if (!keys.length) fail("selection-not-ready", "single-selection manifest has no stable candidate identity")
-      const next = transition(job, "awaiting-user-selection", {
+      const next = finalizeCollectedAttempt(job, attemptId, {
+        state: "awaiting-user-selection",
         candidateKeys: keys,
         actualCount: Number(manifest.actualCount) || frozen.length,
         incomplete: false,
@@ -250,11 +459,16 @@ export async function collectJob(jobDir, manifestPath) {
       return { status: "awaiting-user-selection", ...safeJob(next) }
     }
 
-    const { candidates, rejected } = appendCandidates(job, await inputItems(manifest))
-    const requested = job.workflow === "ai" ? 2 : job.requestedCount
-    const enough = job.workflow === "ai" ? candidates.length >= 2 : candidates.length > 0
-    if (!enough) {
-      if (job.workflow === "ai" && job.recoveryRetryCount < 1) {
+    const { candidates, rejected } = appendCandidates(job, await inputItems(manifest, { assetKeys }), {
+      provider,
+      attemptId,
+    })
+    const requested = requestedCandidateCount(job)
+    const enough = candidates.length >= requested
+
+    // Grok AI: one initial attempt; keep bound for a single same-attempt retry.
+    if (provider === "grok" && job.workflow === "ai" && !enough) {
+      if (job.recoveryRetryCount < 1) {
         const next = writeBatch({
           ...job,
           candidates,
@@ -265,17 +479,115 @@ export async function collectJob(jobDir, manifestPath) {
         })
         return { status: "retry", retry: true, rejected, ...safeJob(next) }
       }
-      const error = job.workflow === "ai" ? "insufficient-candidates" : "timeout"
-      writeBatch({ ...job, candidates, actualCount: candidates.length, incomplete: true, lastError: error })
-      fail(error, `${candidates.length}/${requested} valid candidates`, { rejected })
+      writeBatch({ ...job, candidates, actualCount: candidates.length, incomplete: true, lastError: "insufficient-candidates" })
+      fail("insufficient-candidates", `${candidates.length}/${requested} valid candidates`, { rejected })
     }
+
+    // Grok user group: any positive set is ready (possibly incomplete); zero fails.
+    if (provider === "grok") {
+      if (candidates.length === 0) {
+        writeBatch({ ...job, candidates, actualCount: 0, incomplete: true, lastError: "timeout" })
+        fail("timeout", `0/${requested} valid candidates`, { rejected })
+      }
+      const finalCandidates = candidates.slice(0, requested)
+      const next = finalizeCollectedAttempt(job, attemptId, {
+        state: "candidates-ready",
+        candidates: finalCandidates,
+        candidateKeys: candidateIdentityKeys(finalCandidates),
+        actualCount: finalCandidates.length,
+        incomplete: finalCandidates.length < requested,
+        lastError: null,
+      })
+      return { status: "candidates-ready", rejected, ...safeJob(next) }
+    }
+
+    // GPT: always close the current attempt after collect; fill/recovery are new attempts.
+    if (enough) {
+      const finalCandidates = candidates.slice(0, requested)
+      const next = finalizeCollectedAttempt(job, attemptId, {
+        state: "candidates-ready",
+        candidates: finalCandidates,
+        candidateKeys: candidateIdentityKeys(finalCandidates),
+        actualCount: finalCandidates.length,
+        incomplete: false,
+        lastError: null,
+      })
+      return { status: "candidates-ready", rejected, ...safeJob(next) }
+    }
+
+    const marked = markAttemptCollected(job, attemptId)
+    if (!marked.ok) fail(marked.error || "attempt-not-ready")
+    const afterCollect = {
+      ...marked.job,
+      candidates,
+      candidateKeys: candidateIdentityKeys(candidates),
+      actualCount: candidates.length,
+      incomplete: true,
+      lastError: candidates.length === 0 ? "insufficient-candidates" : null,
+    }
+    const budget = remainingAttemptBudget(afterCollect, "fill")
+    const recoveryBudget = remainingAttemptBudget(afterCollect, "recovery")
+
+    if (candidates.length === 0) {
+      // Group: never auto-retry. AI: only continue when fill/recovery budget remains.
+      if (job.workflow === "user" || (budget.baseRemaining <= 0 && recoveryBudget.recoveryRemaining <= 0)) {
+        writeBatch({ ...afterCollect, lastError: job.workflow === "ai" ? "attempt-budget-exhausted" : "timeout" })
+        fail(
+          job.workflow === "ai" ? "attempt-budget-exhausted" : "timeout",
+          `0/${requested} valid candidates`,
+          { rejected, ...budgetFields(afterCollect) },
+        )
+      }
+      const next = writeBatch({ ...afterCollect, state: "generating" })
+      return {
+        status: "generating",
+        rejected,
+        fillEligible: budget.baseRemaining > 0,
+        recoveryEligible: recoveryBudget.recoveryRemaining > 0,
+        ...safeJob(next),
+      }
+    }
+
+    if (budget.baseRemaining > 0 && job.workflow === "ai") {
+      const next = writeBatch({ ...afterCollect, state: "generating", lastError: null })
+      return {
+        status: "generating",
+        rejected,
+        fillEligible: true,
+        recoveryEligible: false,
+        ...safeJob(next),
+      }
+    }
+
+    if (budget.baseRemaining > 0 && job.workflow === "user" && job.selectionMode === "group") {
+      const next = writeBatch({ ...afterCollect, state: "generating", lastError: null })
+      return {
+        status: "generating",
+        rejected,
+        fillEligible: true,
+        recoveryEligible: false,
+        ...safeJob(next),
+      }
+    }
+
+    // Budget exhausted with at least one candidate → ready incomplete (group) or AI fail.
+    if (job.workflow === "ai") {
+      writeBatch({ ...afterCollect, lastError: "attempt-budget-exhausted" })
+      fail("attempt-budget-exhausted", `${candidates.length}/${requested} valid candidates`, {
+        rejected,
+        ...budgetFields(afterCollect),
+      })
+    }
+
     const finalCandidates = candidates.slice(0, requested)
-    const next = transition(job, "candidates-ready", {
+    const next = transition(afterCollect, "candidates-ready", {
       candidates: finalCandidates,
       candidateKeys: candidateIdentityKeys(finalCandidates),
       actualCount: finalCandidates.length,
       incomplete: finalCandidates.length < requested,
       lastError: null,
+      attempts: afterCollect.attempts,
+      activeAttemptId: afterCollect.activeAttemptId,
     })
     return { status: "candidates-ready", rejected, ...safeJob(next) }
   })
@@ -297,7 +609,7 @@ function candidateIds(job, ids) {
 
 export async function chooseJob(jobDir, options = {}) {
   return withJobLockAsync(jobDir, async () => {
-    const job = requireJob(jobDir)
+    const job = requireProvider(requireJob(jobDir), options.provider, { required: true })
     const checked = validateChoose({ ...options, jobDir, batchKey: job.batchKey })
     if (!checked.ok) fail(checked.error)
     const value = checked.value
@@ -358,9 +670,9 @@ export async function chooseJob(jobDir, options = {}) {
   })
 }
 
-export function redrawJob(jobDir, { refine = false, reason = null, prompt = null } = {}) {
+export function redrawJob(jobDir, { refine = false, reason = null, prompt = null, provider } = {}) {
   return withJobLock(jobDir, () => {
-    const job = requireJob(jobDir)
+    const job = requireProvider(requireJob(jobDir), provider, { required: true })
     const retryableFailure = job.state === "generating" && Boolean(job.lastError)
     if (!["awaiting-user-selection", "candidates-ready"].includes(job.state) && !retryableFailure) fail("batch-not-ready")
     if (refine) {
@@ -394,15 +706,18 @@ export function redrawJob(jobDir, { refine = false, reason = null, prompt = null
       lastChooseResult: null,
       artifact: null,
       lastError: null,
+      attempts: [],
+      activeAttemptId: null,
+      migrationUnprovable: false,
     }))
     next = transition(next, "generating")
     return { status: "generating", redraw: true, refine, ...safeJob(next), prompt: next.prompt, quality: next.quality, aspect: next.aspect }
   })
 }
 
-export function expireJob(jobDir, { reason = "selection-expired" } = {}) {
+export function expireJob(jobDir, { reason = "selection-expired", provider } = {}) {
   return withJobLock(jobDir, () => {
-    const job = requireJob(jobDir)
+    const job = requireProvider(requireJob(jobDir), provider, { required: true })
     if (job.state === "selection-expired") return { status: "selection-expired", idempotent: true, ...safeJob(job) }
     if (!["generating", "awaiting-user-selection", "candidates-ready"].includes(job.state)) fail("batch-not-ready")
     const next = transition(job, "selection-expired", {
@@ -413,9 +728,9 @@ export function expireJob(jobDir, { reason = "selection-expired" } = {}) {
   })
 }
 
-export function cancelJob(jobDir) {
+export function cancelJob(jobDir, { provider } = {}) {
   return withJobLock(jobDir, () => {
-    const job = requireJob(jobDir)
+    const job = requireProvider(requireJob(jobDir), provider, { required: true })
     if (job.state === "cancelled") return { status: "cancelled", idempotent: true, ...safeJob(job) }
     if (!["preparing", "generating", "awaiting-user-selection", "candidates-ready"].includes(job.state)) fail("batch-not-ready")
     const next = transition(job, "cancelled")
@@ -423,18 +738,22 @@ export function cancelJob(jobDir) {
   })
 }
 
-export function statusJob({ jobDir, workspace, sessionID } = {}) {
+export function statusJob({ jobDir, workspace, sessionID, provider } = {}) {
   const job = jobDir ? requireJob(jobDir) : sessionID ? lastJob(sessionID, { workspace }) : latestJob(workspace)
   if (!job) fail("no-job")
+  requireProvider(job, provider)
   return { status: "ok", ...safeJob(job) }
 }
 
-export function debugJob(jobDir) {
+export function debugJob(jobDir, { provider } = {}) {
   const job = requireJob(jobDir)
+  requireProvider(job, provider)
+  const attemptDebug = debugAttempts(job)
   return {
     status: "ok",
     debug: {
       batchKey: job.batchKey,
+      provider: job.provider || null,
       state: job.state,
       workflow: job.workflow,
       selection: job.selectionMode,
@@ -444,6 +763,10 @@ export function debugJob(jobDir) {
       recoveryRetryCount: job.recoveryRetryCount,
       refinementUsed: job.refinementUsed,
       lastError: job.lastError || null,
+      migrationUnprovable: attemptDebug.migrationUnprovable,
+      attempts: attemptDebug.attempts,
+      baseRemaining: attemptDebug.baseRemaining,
+      recoveryRemaining: attemptDebug.recoveryRemaining,
       candidates: (job.candidates || []).map(({ id, type, width, height }) => ({ id, type, width, height })),
     },
   }
