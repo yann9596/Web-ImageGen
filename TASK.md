@@ -133,10 +133,14 @@ S9 不属于默认实现门禁；未授权时以离线验证完成交付。
   - [x] GPT-007 三值切换执行（PS-01～04）
   - [x] GPT-008 切换中断注入（PS-05）
   - [x] GPT-009 `provider:default` 发布门；公开 CLI 拒绝 `gpt`/`openai`（PS-06/07）
-- [ ] Phase B（GPT-010～017）：job schema v2 与 Provider Attempt。
-- [ ] Phase C（GPT-018～021）：Grok/GPT 资产身份模块。
-- [ ] Phase D（GPT-022～025）：下载快照、resolver 与候选准入。
-- [ ] Phase E（GPT-026～032）：Grok 回归及 GPT 三种 workflow。
-- [ ] Phase F（GPT-033～036）：Skill provider 路由。
+- [x] Phase B（GPT-010～017）：job schema v2 与 Provider Attempt。
+- [x] Phase C（GPT-018～021）：Grok/GPT 资产身份模块。
+- [x] Phase D（GPT-022～025）：下载快照、resolver 与候选准入。
+- [x] Phase E（GPT-026～032）：Grok 回归及 GPT 三种 workflow。
+- [x] Phase F（GPT-033～036）：Skill provider 路由。
+  - [x] GPT-033 Skill `scripts/provider.mjs` status 入口（与根 CLI 一致）
+  - [x] GPT-034 Grok 页面/Post/×2/下载规则迁入 `references/providers/grok.md`
+  - [x] GPT-035 GPT 空白对话/锚点/提交/绑定/物化写入 `references/providers/gpt.md`
+  - [x] GPT-036 顶层 Skill 先 status，再只加载一个 provider 与一个 workflow 文档（SK-01～03）
 - [ ] Phase G（GPT-037～040）：离线总验收与 GPT 命令发布门。
 - [ ] Phase H（GPT-041～046）：逐项授权的真实浏览器验证与收尾。
